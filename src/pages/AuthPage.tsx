@@ -2,15 +2,17 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Navigate } from 'react-router-dom'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { BookOpen, Sparkles, Trophy, Target, Users, Star } from 'lucide-react'
+import { LOCAL_LOGIN_ENABLED, LOCAL_LOGIN_FULL_NAME } from '@/lib/config'
+import { BookOpen, Sparkles, Trophy, Target, Users, Star, Zap } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 export function AuthPage() {
-  const { user, signIn, signUp, loading } = useAuth()
+  const { user, signIn, signUp, localSignIn, loading } = useAuth()
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLocalSigningIn, setIsLocalSigningIn] = useState(false)
 
   if (loading) {
     return (
@@ -39,6 +41,19 @@ export function AuthPage() {
       console.error('Auth error:', error)
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleLocalSignIn = async () => {
+    setIsLocalSigningIn(true)
+    try {
+      await localSignIn()
+      // Success: AuthContext updates `user`, and the <Navigate> below
+      // redirects to the dashboard.
+    } catch (error) {
+      console.error('Local sign-in error:', error)
+    } finally {
+      setIsLocalSigningIn(false)
     }
   }
 
@@ -164,6 +179,39 @@ export function AuthPage() {
                   )}
                 </button>
               </form>
+
+              {LOCAL_LOGIN_ENABLED && (
+                <div className="mt-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-200" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-white/80 px-3 text-gray-400">or</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLocalSignIn}
+                    disabled={isSubmitting || isLocalSigningIn}
+                    className="mt-6 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3 px-6 rounded-xl font-medium transition-all duration-200 hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLocalSigningIn ? (
+                      <LoadingSpinner size="sm" />
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5" />
+                        Continue as {LOCAL_LOGIN_FULL_NAME}
+                      </>
+                    )}
+                  </button>
+
+                  <p className="mt-3 text-center text-xs text-gray-400">
+                    One-click demo login - no account or network required, works completely offline
+                  </p>
+                </div>
+              )}
 
               <div className="mt-6 text-center">
                 <p className="text-gray-600">

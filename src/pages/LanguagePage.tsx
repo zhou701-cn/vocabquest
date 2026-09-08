@@ -20,7 +20,7 @@ import {
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import toast from 'react-hot-toast'
 
-export function DashboardPage() {
+export function LanguagePage() {
   const { user, profile, gamification, signOut } = useAuth()
   const { 
     fetchVocabularyLists, 
@@ -39,7 +39,7 @@ export function DashboardPage() {
     }
   }, [user, fetchVocabularyLists, fetchUserProgress])
 
-  const startLearningMode = (mode: 'flashcards' | 'quiz' | 'spelling' | 'review') => {
+  const startLearningMode = (mode: 'language' | 'poem') => {
     if (!currentList) {
       toast.error('Please select a vocabulary list first')
       return
