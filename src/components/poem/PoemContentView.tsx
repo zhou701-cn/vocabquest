@@ -26,6 +26,12 @@ interface PoemContentViewProps {
   onBack: () => void
   /** 上一曲/下一曲：跳到项目内另一首诗词 */
   onSelectPoem?: (poemId: string) => void
+  /**
+   * 是否开启正文“单行行内编辑”（行号列、点击行编辑、悬停插入行/删除行等操作）。
+   * 默认为 false：正文以纯净阅读排版展示，不显示单行操作；
+   * 需要精细调整单行内容时置为 true（整首改写仍可随时使用顶部 “Edit poem”）。
+   */
+  lineEditingEnabled?: boolean
 }
 
 type EditingState =
@@ -37,6 +43,7 @@ export function PoemContentView({
   poem,
   onBack,
   onSelectPoem,
+  lineEditingEnabled = false,
 }: PoemContentViewProps) {
   const updatePoemMeta = usePoemStore((s) => s.updatePoemMeta)
   const setPoemLines = usePoemStore((s) => s.setPoemLines)
@@ -49,7 +56,7 @@ export function PoemContentView({
   const support = usePoemPlayerStore((s) => s.support)
   const playStatus = usePoemPlayerStore((s) => s.status)
   const rate = usePoemPlayerStore((s) => s.rate)
-  const repeatOn = usePoemPlayerStore((s) => s.repeat)
+  const playMode = usePoemPlayerStore((s) => s.mode)
   const reading = usePoemPlayerStore((s) => s.reading)
   const playingProjectId = usePoemPlayerStore((s) => s.playingProjectId)
   const playingPoemId = usePoemPlayerStore((s) => s.playingPoemId)
@@ -59,7 +66,7 @@ export function PoemContentView({
   const playerResume = usePoemPlayerStore((s) => s.resume)
   const playerStop = usePoemPlayerStore((s) => s.stop)
   const playerSetRate = usePoemPlayerStore((s) => s.setRate)
-  const playerToggleRepeat = usePoemPlayerStore((s) => s.setRepeat)
+  const playerSetMode = usePoemPlayerStore((s) => s.setMode)
 
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null)
@@ -79,20 +86,19 @@ export function PoemContentView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 离开当前播放的诗词（比如从列表进入另一首）时自动停止旧音频
-  useEffect(() => {
-    const st = usePoemPlayerStore.getState()
-    if (
-      st.status !== 'idle' &&
-      (st.playingProjectId !== project.id || st.playingPoemId !== poem.id)
-    ) {
-      st.stop()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id, poem.id])
-
+  // 注：本页不再“进入后自动停掉旧音频”——全局悬浮播放器可能正在整本续播，
+  // 切页/浏览不应打断播放；需要停止时由播放器上的停止按钮显式控制。
   const isThisPoemActive =
     playingProjectId === project.id && playingPoemId === poem.id && playStatus !== 'idle'
+
+  // 同项目后台正在播放别的诗词时的提示（便于在详情页切回本首）
+  const otherPlayingTitle =
+    playStatus !== 'idle' &&
+    playingProjectId === project.id &&
+    !!playingPoemId &&
+    playingPoemId !== poem.id
+      ? allPoems.find((p) => p.id === playingPoemId)?.title ?? null
+      : null
 
   // 当前正在朗读的位置（仅本诗有效）
   const readingKind = isThisPoemActive ? reading?.kind ?? null : null
@@ -106,7 +112,6 @@ export function PoemContentView({
     if (readingLine !== null && isThisPoemActive && activeRowRef.current) {
       activeRowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readingLine, isThisPoemActive])
 
   const handleMainButton = () => {
@@ -157,6 +162,11 @@ export function PoemContentView({
     deletePoem(project.id, poem.id)
     onBack()
   }
+
+  const isEditingRow = (rowIndex: number) =>
+    !!editing &&
+    ((editing.kind === 'edit' && editing.index === rowIndex) ||
+      (editing.kind === 'insert' && editing.afterIndex === rowIndex))
 
   const startEdit = (index: number) => setEditing({ kind: 'edit', index, draft: lines[index] })
 
@@ -298,6 +308,11 @@ export function PoemContentView({
                   />
                   <span className="truncate">{nowReadingLabel}</span>
                 </span>
+              ) : otherPlayingTitle ? (
+                <span className="text-gray-400 truncate inline-flex items-center gap-1.5 max-w-full">
+                  <span className="inline-block w-2 h-2 rounded-full bg-violet-500 animate-pulse shrink-0" />
+                  <span className="truncate">正在播放「{otherPlayingTitle}」· 点击 ▶ 可切回本首</span>
+                </span>
               ) : (
                 <span className="text-gray-400 truncate">
                   {poem.title || 'Untitled'} · 点击 ▶ 逐行朗读
@@ -307,11 +322,11 @@ export function PoemContentView({
 
             <div className="flex items-center gap-2 shrink-0">
               <button
-                onClick={() => playerToggleRepeat(!repeatOn)}
-                aria-pressed={repeatOn}
-                title={repeatOn ? '单曲循环：开' : '单曲循环：关'}
+                onClick={() => playerSetMode(playMode === 'single' ? 'list' : 'single')}
+                aria-pressed={playMode === 'single'}
+                title={playMode === 'single' ? '单曲循环：开' : '单曲循环：关'}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-colors ${
-                  repeatOn
+                  playMode === 'single'
                     ? 'bg-violet-50 border-violet-200 text-violet-700'
                     : 'border-gray-200 text-gray-400 hover:text-gray-600'
                 }`}
@@ -354,17 +369,15 @@ export function PoemContentView({
           {lines.length === 0 ? (
             <div className="text-center py-8 text-gray-400 text-sm">
               <Quote className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-              No body lines yet. Add the first line below.
+              {lineEditingEnabled
+                ? 'No body lines yet. Add the first line below.'
+                : '本首暂无正文，可点击右上角 “Edit poem” 补充。'}
             </div>
           ) : (
             <div className="space-y-1">
               {lines.map((text, rowIndex) => {
                 const isEmpty = text.trim() === ''
-                const isEditingThis =
-                  editing &&
-                  ((editing.kind === 'edit' && editing.index === rowIndex) ||
-                    (editing.kind === 'insert' && editing.afterIndex === rowIndex))
-                const rowReading = readingLine === rowIndex && !isEditingThis
+                const rowReading = readingLine === rowIndex && !isEditingRow(rowIndex)
                 return (
                   <div
                     key={rowIndex}
@@ -373,136 +386,142 @@ export function PoemContentView({
                       rowReading ? 'bg-violet-100/80 ring-1 ring-violet-300/70' : ''
                     }`}
                   >
-                    <span className="w-8 shrink-0 pt-3 text-right text-xs text-gray-300 select-none">
-                      {rowIndex + 1}
-                    </span>
-
-                    {isEditingThis ? (
-                      <div className="flex-1 flex flex-col gap-2 py-1">
-                        <textarea
-                          autoFocus
-                          rows={Math.max(1, Math.ceil((editing.draft.length || 8) / 40))}
-                          value={editing.draft}
-                          onChange={(e) => setEditing({ ...editing, draft: e.target.value })}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') setEditing(null)
-                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveEditing()
-                          }}
-                          className="w-full px-3 py-2 rounded-lg border border-violet-300 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 text-[17px] resize-y leading-relaxed"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={saveEditing}
-                            className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition-colors"
-                          >
-                            <Save className="w-3.5 h-3.5" /> Save
-                          </button>
-                          <button
-                            onClick={() => setEditing(null)}
-                            className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-gray-600 hover:bg-gray-100 text-xs font-medium transition-colors"
-                          >
-                            <X className="w-3.5 h-3.5" /> Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : isEmpty ? (
-                      <div className="flex-1 relative py-3">
-                        <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-gray-200" />
-                        <div className="relative flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => startInsertAfter(rowIndex)}
-                            className="p-1 rounded-md bg-white shadow border border-gray-200 text-gray-400 hover:text-violet-600 hover:border-violet-300"
-                            title="Insert line below"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => startEdit(rowIndex)}
-                            className="p-1 rounded-md bg-white shadow border border-gray-200 text-gray-400 hover:text-violet-600 hover:border-violet-300"
-                            title="Fill this blank line"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                    {lineEditingEnabled ? (
+                      <>
+                        <span className="w-8 shrink-0 pt-3 text-right text-xs text-gray-300 select-none">
+                          {rowIndex + 1}
+                        </span>
+                        {isEditingRow(rowIndex) ? (
+                          <div className="flex-1 flex flex-col gap-2 py-1">
+                            <textarea
+                              autoFocus
+                              rows={Math.max(1, Math.ceil((editing!.draft.length || 8) / 40))}
+                              value={editing!.draft}
+                              onChange={(e) => setEditing({ ...editing!, draft: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') setEditing(null)
+                                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveEditing()
+                              }}
+                              className="w-full px-3 py-2 rounded-lg border border-violet-300 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 text-[17px] resize-y leading-relaxed"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={saveEditing}
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition-colors"
+                              >
+                                <Save className="w-3.5 h-3.5" /> Save
+                              </button>
+                              <button
+                                onClick={() => setEditing(null)}
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-gray-600 hover:bg-gray-100 text-xs font-medium transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" /> Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : isEmpty ? (
+                          <div className="flex-1 relative py-3">
+                            <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-gray-200" />
+                            <div className="relative flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => startInsertAfter(rowIndex)}
+                                className="p-1 rounded-md bg-white shadow border border-gray-200 text-gray-400 hover:text-violet-600 hover:border-violet-300"
+                                title="Insert line below"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => startEdit(rowIndex)}
+                                className="p-1 rounded-md bg-white shadow border border-gray-200 text-gray-400 hover:text-violet-600 hover:border-violet-300"
+                                title="Fill this blank line"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-violet-50/60 transition-colors">
+                            <div className="flex-1 text-center">
+                              <span
+                                className="inline-block text-[19px] leading-loose text-gray-800 tracking-wide cursor-text select-text"
+                                onClick={() => startEdit(rowIndex)}
+                              >
+                                {text}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => startInsertAfter(rowIndex)}
+                                className="p-1.5 rounded-md text-gray-400 hover:text-violet-600 hover:bg-white"
+                                title="Insert line below"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => startEdit(rowIndex)}
+                                className="p-1.5 rounded-md text-gray-400 hover:text-violet-600 hover:bg-white"
+                                title="Edit line"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              {deleteConfirmIndex === rowIndex ? (
+                                <span className="flex items-center gap-1 text-xs text-red-700 px-1.5">
+                                  Delete?
+                                  <button
+                                    onClick={() => {
+                                      deletePoemLine(project.id, poem.id, rowIndex)
+                                      setDeleteConfirmIndex(null)
+                                    }}
+                                    className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[11px] hover:bg-red-700"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteConfirmIndex(null)}
+                                    className="px-1.5 py-0.5 rounded text-red-700 text-[11px] hover:bg-red-100"
+                                  >
+                                    No
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => setDeleteConfirmIndex(rowIndex)}
+                                  className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-white"
+                                  title="Delete line"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     ) : (
-                      <div className="flex-1 flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-violet-50/60 transition-colors">
-                        <div className="flex-1 text-center">
-                          <span
-                            className="inline-block text-[19px] leading-loose text-gray-800 tracking-wide cursor-text select-text"
-                            onClick={() => startEdit(rowIndex)}
-                          >
-                            {text}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => startInsertAfter(rowIndex)}
-                            className="p-1.5 rounded-md text-gray-400 hover:text-violet-600 hover:bg-white"
-                            title="Insert line below"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => startEdit(rowIndex)}
-                            className="p-1.5 rounded-md text-gray-400 hover:text-violet-600 hover:bg-white"
-                            title="Edit line"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          {deleteConfirmIndex === rowIndex ? (
-                            <span className="flex items-center gap-1 text-xs text-red-700 px-1.5">
-                              Delete?
-                              <button
-                                onClick={() => {
-                                  deletePoemLine(project.id, poem.id, rowIndex)
-                                  setDeleteConfirmIndex(null)
-                                }}
-                                className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[11px] hover:bg-red-700"
-                              >
-                                Yes
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirmIndex(null)}
-                                className="px-1.5 py-0.5 rounded text-red-700 text-[11px] hover:bg-red-100"
-                              >
-                                No
-                              </button>
+                      /* 纯净阅读模式：不显示行号与任何单行编辑操作 */
+                      isEmpty ? (
+                        <div className="flex-1 py-3" />
+                      ) : (
+                        <div className="flex-1 px-3 py-2.5">
+                          <div className="text-center">
+                            <span className="inline-block text-[19px] leading-loose text-gray-800 tracking-wide select-text">
+                              {text}
                             </span>
-                          ) : (
-                            <button
-                              onClick={() => setDeleteConfirmIndex(rowIndex)}
-                              className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-white"
-                              title="Delete line"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          </div>
                         </div>
-                      </div>
+                      )
                     )}
                   </div>
                 )
               })}
             </div>
           )}
-
-          {/* 追加一行 */}
-          <button
-            onClick={() => startInsertAfter(lines.length - 1)}
-            className="mt-6 w-full py-2.5 rounded-xl border-2 border-dashed border-violet-200 text-violet-500 hover:border-violet-400 hover:bg-violet-50/50 transition-colors inline-flex items-center justify-center gap-2 font-medium text-sm"
-          >
-            <Plus className="w-4 h-4" /> Add a line
-          </button>
-
-          <p className="mt-3 text-center text-xs text-gray-400">
-            {nonEmpty} body lines · {lines.reduce((n, l) => n + l.length, 0).toLocaleString()} chars
-          </p>
         </div>
 
-        <p className="mt-4 text-xs text-gray-400 text-center">
-          Click any line to edit, or use “Edit poem” to rewrite the whole poem at once.
-        </p>
+        {lineEditingEnabled && (
+          <p className="mt-4 text-xs text-gray-400 text-center">
+            Click any line to edit, or use “Edit poem” to rewrite the whole poem at once.
+          </p>
+        )}
       </div>
 
       {fullEditOpen && (

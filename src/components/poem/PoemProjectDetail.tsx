@@ -6,10 +6,13 @@ import {
   Check,
   FileText,
   FileUp,
+  Pause,
   Pencil,
+  Play,
   Plus,
   Quote,
   Search,
+  Shuffle,
   Trash2,
   X,
 } from 'lucide-react'
@@ -38,6 +41,15 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
   const importPoems = usePoemStore((s) => s.importPoems)
   const addPoem = usePoemStore((s) => s.addPoem)
 
+  // ---------- 整项目队列播放 ----------
+  const queueProjectId = usePoemPlayerStore((s) => s.queueProjectId)
+  const playingProjectId = usePoemPlayerStore((s) => s.playingProjectId)
+  const playingPoemId = usePoemPlayerStore((s) => s.playingPoemId)
+  const playerStatus = usePoemPlayerStore((s) => s.status)
+  const playerPlayProject = usePoemPlayerStore((s) => s.playProject)
+  const playerPause = usePoemPlayerStore((s) => s.pause)
+  const playerResume = usePoemPlayerStore((s) => s.resume)
+
   const [renaming, setRenaming] = useState(false)
   const [draftName, setDraftName] = useState(project.name)
   const [query, setQuery] = useState('')
@@ -45,7 +57,7 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
   const [addOpen, setAddOpen] = useState(false)
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false)
 
-  const poems = project.poems ?? []
+  const poems = useMemo(() => project.poems ?? [], [project.poems])
 
   const stats = useMemo(() => {
     const lineCount = poems.reduce((acc, p) => acc + p.lines.length, 0)
@@ -139,7 +151,27 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 mr-1">
+              <button
+                onClick={() => playerPlayProject(project.id, 0, 'list')}
+                disabled={poems.length === 0}
+                title={poems.length ? '顺序播放本项目的全部诗词' : '暂无诗词可播放'}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-violet-200 text-violet-700 text-sm font-medium hover:bg-violet-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                Play All
+              </button>
+              <button
+                onClick={() => playerPlayProject(project.id, -1, 'shuffle')}
+                disabled={poems.length === 0}
+                title={poems.length ? '随机播放本项目的全部诗词' : '暂无诗词可播放'}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-gray-500 text-sm font-medium hover:border-violet-300 hover:text-violet-700 hover:bg-violet-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Shuffle className="w-4 h-4" />
+                Shuffle
+              </button>
+            </div>
             <button
               onClick={() => setImportOpen(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium shadow hover:opacity-90 transition-opacity"
@@ -244,13 +276,27 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
               <div className="mt-6 space-y-2.5">
                 {visiblePoems.map((poem, i) => {
                   const excerpt = poemExcerpt(poem.lines)
+                  const rowActive =
+                    queueProjectId === project.id &&
+                    playingProjectId === project.id &&
+                    playingPoemId === poem.id &&
+                    playerStatus !== 'idle'
+                  const rowPlaying = rowActive && playerStatus === 'playing'
                   return (
                     <div
                       key={poem.id}
                       onClick={() => openPoem(poem.id)}
-                      className="group relative flex items-center gap-4 rounded-xl bg-white/80 border border-gray-100 px-4 py-3.5 shadow-sm hover:shadow-md hover:border-violet-200 cursor-pointer transition-all"
+                      className={`group relative flex items-center gap-4 rounded-xl bg-white/80 border px-4 py-3.5 shadow-sm hover:shadow-md cursor-pointer transition-all ${
+                        rowActive
+                          ? 'border-violet-300 bg-violet-50/60'
+                          : 'border-gray-100 hover:border-violet-200'
+                      }`}
                     >
-                      <div className="w-8 shrink-0 text-center text-sm font-bold text-gray-300">
+                      <div
+                        className={`w-8 shrink-0 text-center text-sm font-bold ${
+                          rowActive ? 'text-violet-500' : 'text-gray-300'
+                        }`}
+                      >
                         {i + 1}
                       </div>
 
@@ -277,6 +323,48 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
                           {poem.lines.reduce((n, l) => n + l.length, 0).toLocaleString()} chars
                         </span>
                       </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (rowPlaying) {
+                            playerPause()
+                          } else if (rowActive && playerStatus === 'paused') {
+                            playerResume()
+                          } else {
+                            // 搜索过滤后 visiblePoems 的下标 ≠ 项目内真实下标
+                            const realIndex = poems.findIndex((p) => p.id === poem.id)
+                            playerPlayProject(
+                              project.id,
+                              realIndex >= 0 ? realIndex : i,
+                              'list',
+                            )
+                          }
+                        }}
+                        aria-label={rowPlaying ? 'Pause this poem' : 'Play from this poem'}
+                        title={
+                          rowActive
+                            ? rowPlaying
+                              ? '暂停'
+                              : '继续播放'
+                            : '从这首开始顺序播放整本'
+                        }
+                        className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-white shadow transition-all ${
+                          rowPlaying
+                            ? 'bg-violet-500 hover:bg-violet-600'
+                            : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90'
+                        } ${
+                          rowActive
+                            ? 'opacity-100'
+                            : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+                        }`}
+                      >
+                        {rowPlaying ? (
+                          <Pause className="w-3.5 h-3.5" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5 ml-px" />
+                        )}
+                      </button>
 
                       <ArrowRight className="w-4 h-4 shrink-0 text-gray-300 group-hover:text-violet-500 group-hover:translate-x-0.5 transition-all" />
                     </div>

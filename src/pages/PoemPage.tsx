@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -7,7 +7,9 @@ import {
   FileText,
   FileUp,
   Home,
+  Pause,
   Pencil,
+  Play,
   Quote,
   Trash2,
   X,
@@ -21,6 +23,7 @@ import {
 } from '@/components/poem/PoemImportDialog'
 import { PoemProjectDetail } from '@/components/poem/PoemProjectDetail'
 import { PoemContentView } from '@/components/poem/PoemContentView'
+import { PoemFloatingPlayer } from '@/components/poem/PoemFloatingPlayer'
 
 const FORMAT_STYLE: Record<PoemProject['format'], string> = {
   pdf: 'bg-red-100 text-red-700',
@@ -44,40 +47,51 @@ export function PoemPage() {
   const project = usePoemStore((s) => s.projects.find((p) => p.id === projectId))
   const projectPoems = project?.poems ?? []
 
-  // 三级：单首诗词内容页
+  let view: ReactNode
+
+  // 三级：单首诗词内容页（自带顶部朗读条，悬浮播放器此处隐藏避免重复）
   if (projectId && poemId) {
     if (!project) {
-      return <MissingBack title="This project does not exist or was deleted." to="/poem" />
+      view = <MissingBack title="This project does not exist or was deleted." to="/poem" />
+    } else {
+      const poem = projectPoems.find((p) => p.id === poemId)
+      if (!poem) {
+        view = (
+          <MissingBack
+            title="This poem does not exist or was deleted."
+            to={`/poem/${project.id}`}
+          />
+        )
+      } else {
+        view = (
+          <PoemContentView
+            key={poem.id}
+            project={project}
+            poem={poem}
+            onBack={() => navigate(`/poem/${project.id}`)}
+            onSelectPoem={(pid) => navigate(`/poem/${project.id}/${pid}`)}
+          />
+        )
+      }
     }
-    const poem = projectPoems.find((p) => p.id === poemId)
-    if (!poem) {
-      return (
-        <MissingBack
-          title="This poem does not exist or was deleted."
-          to={`/poem/${project.id}`}
-        />
-      )
-    }
-    return (
-      <PoemContentView
-        key={poem.id}
-        project={project}
-        poem={poem}
-        onBack={() => navigate(`/poem/${project.id}`)}
-        onSelectPoem={(poemId) => navigate(`/poem/${project.id}/${poemId}`)}
-      />
-    )
-  }
-
-  // 二级：项目内诗词列表
-  if (projectId) {
+  } else if (projectId) {
+    // 二级：项目内诗词列表
     if (!project) {
-      return <MissingBack title="This project does not exist or was deleted." to="/poem" />
+      view = <MissingBack title="This project does not exist or was deleted." to="/poem" />
+    } else {
+      view = <PoemProjectDetail key={project.id} project={project} onBack={() => navigate('/poem')} />
     }
-    return <PoemProjectDetail key={project.id} project={project} onBack={() => navigate('/poem')} />
+  } else {
+    view = <PoemProjectList />
   }
 
-  return <PoemProjectList />
+  return (
+    <>
+      {view}
+      {/* 悬浮可拖动播放器：单首详情页不重复展示 */}
+      <PoemFloatingPlayer show={!(projectId && poemId)} />
+    </>
+  )
 }
 
 /* ------------------------------ 缺失提示 ------------------------------ */
@@ -107,6 +121,13 @@ function PoemProjectList() {
   const createProject = usePoemStore((s) => s.createProject)
   const renameProject = usePoemStore((s) => s.renameProject)
   const deleteProject = usePoemStore((s) => s.deleteProject)
+
+  const queueProjectId = usePoemPlayerStore((s) => s.queueProjectId)
+  const playingProjectId = usePoemPlayerStore((s) => s.playingProjectId)
+  const playerStatus = usePoemPlayerStore((s) => s.status)
+  const playerPlayProject = usePoemPlayerStore((s) => s.playProject)
+  const playerPause = usePoemPlayerStore((s) => s.pause)
+  const playerResume = usePoemPlayerStore((s) => s.resume)
 
   const [importOpen, setImportOpen] = useState(false)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -336,7 +357,40 @@ function PoemProjectList() {
                         {charCount.toLocaleString()} chars
                       </span>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-violet-500 group-hover:translate-x-0.5 transition-all" />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {projectPoems.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const active =
+                              queueProjectId === project.id &&
+                              playingProjectId === project.id &&
+                              playerStatus !== 'idle'
+                            if (active && playerStatus === 'playing') playerPause()
+                            else if (active && playerStatus === 'paused') playerResume()
+                            else playerPlayProject(project.id, 0, 'list')
+                          }}
+                          aria-label="Play all poems in this project"
+                          title="Play all poems in this project"
+                          className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-white shadow transition-all ${
+                            queueProjectId === project.id &&
+                            playingProjectId === project.id &&
+                            playerStatus === 'playing'
+                              ? 'bg-violet-500 hover:bg-violet-600'
+                              : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90'
+                          }`}
+                        >
+                          {queueProjectId === project.id &&
+                          playingProjectId === project.id &&
+                          playerStatus === 'playing' ? (
+                            <Pause className="w-3.5 h-3.5" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5 ml-px" />
+                          )}
+                        </button>
+                      )}
+                      <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-violet-500 group-hover:translate-x-0.5 transition-all" />
+                    </div>
                   </div>
                 </div>
               )
