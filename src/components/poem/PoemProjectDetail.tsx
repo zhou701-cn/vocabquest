@@ -19,7 +19,26 @@ import {
 import type { PoemProject } from '@/types/poem'
 import { usePoemStore } from '@/stores/poemStore'
 import { usePoemPlayerStore } from '@/stores/poemPlayerStore'
+import { usePoemPracticeStore, type PoemPracticeRecord } from '@/stores/poemPracticeStore'
+import { poemPracticeFingerprint } from '@/lib/poemPractice'
 import { PoemImportDialog, PoemImportConfirmData } from './PoemImportDialog'
+
+/** 一首诗的背诵/默写进度小标（正文被编辑后视为过期不展示） */
+function practiceBadge(
+  projectId: string,
+  poem: { id: string; title: string; author?: string; lines: string[] },
+  records: Record<string, PoemPracticeRecord>,
+): { label: string; tone: 'green' | 'amber' | 'violet' } | null {
+  const rec = records[`${projectId}::${poem.id}`]
+  if (!rec || rec.fingerprint !== poemPracticeFingerprint(poem)) return null
+  if (rec.dictate) {
+    const pending = rec.dictate.wrongTypedChars.length + rec.dictate.missedChars.length
+    if (pending > 0) return { label: `${pending} to review`, tone: 'amber' }
+    return { label: 'Dictated', tone: 'green' }
+  }
+  if (rec.recite?.completedOnce) return { label: 'Recited', tone: 'violet' }
+  return null
+}
 
 interface PoemProjectDetailProps {
   project: PoemProject
@@ -40,6 +59,7 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
   const deleteProject = usePoemStore((s) => s.deleteProject)
   const importPoems = usePoemStore((s) => s.importPoems)
   const addPoem = usePoemStore((s) => s.addPoem)
+  const practiceRecords = usePoemPracticeStore((s) => s.records)
 
   // ---------- 整项目队列播放 ----------
   const queueProjectId = usePoemPlayerStore((s) => s.queueProjectId)
@@ -276,6 +296,7 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
               <div className="mt-6 space-y-2.5">
                 {visiblePoems.map((poem, i) => {
                   const excerpt = poemExcerpt(poem.lines)
+                  const badge = practiceBadge(project.id, poem, practiceRecords)
                   const rowActive =
                     queueProjectId === project.id &&
                     playingProjectId === project.id &&
@@ -307,6 +328,19 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
                           </h3>
                           {poem.author && (
                             <span className="text-xs text-gray-400 shrink-0">〔{poem.author}〕</span>
+                          )}
+                          {badge && (
+                            <span
+                              className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${
+                                badge.tone === 'green'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : badge.tone === 'amber'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-violet-100 text-violet-700'
+                              }`}
+                            >
+                              {badge.label}
+                            </span>
                           )}
                         </div>
                         {excerpt ? (

@@ -18,6 +18,12 @@ import {
 import type { Poem, PoemProject } from '@/types/poem'
 import { usePoemStore } from '@/stores/poemStore'
 import { POEM_RATE_STEPS, usePoemPlayerStore } from '@/stores/poemPlayerStore'
+import { PoemRecitePanel } from './PoemRecitePanel'
+import { PoemDictatePanel } from './PoemDictatePanel'
+import { Segmented } from './PoemPracticeUI'
+
+/** 单首内容页的展示模式 */
+type ContentMode = 'read' | 'recite' | 'dictate'
 
 interface PoemContentViewProps {
   project: PoemProject
@@ -72,6 +78,7 @@ export function PoemContentView({
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null)
   const [confirmDeletePoem, setConfirmDeletePoem] = useState(false)
   const [fullEditOpen, setFullEditOpen] = useState(false)
+  const [contentMode, setContentMode] = useState<ContentMode>('read')
 
   const lines = poem.lines
   const nonEmpty = lines.filter((l) => l.trim() !== '').length
@@ -85,6 +92,20 @@ export function PoemContentView({
     playerInit()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 进入练习模式：若正在播放（含其它诗词/整本后台续播）一律停掉，保证练习语境无外部发声
+  useEffect(() => {
+    if (contentMode === 'read') {
+      setEditing(null)
+      setConfirmDeletePoem(false)
+      return
+    }
+    const st = usePoemPlayerStore.getState()
+    if (st.status !== 'idle') playerStop()
+    setEditing(null)
+    setConfirmDeletePoem(false)
+    window.scrollTo({ top: 0 })
+  }, [contentMode, playerStop])
 
   // 注：本页不再“进入后自动停掉旧音频”——全局悬浮播放器可能正在整本续播，
   // 切页/浏览不应打断播放；需要停止时由播放器上的停止按钮显式控制。
@@ -199,6 +220,8 @@ export function PoemContentView({
           <span className="text-gray-300">/</span>
           <span className="text-sm text-gray-500 truncate">{poem.title || 'Untitled'}</span>
           <div className="flex-1" />
+          {contentMode === 'read' && (
+            <>
           <button
             onClick={() => setFullEditOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:text-violet-700 hover:bg-white border border-transparent hover:border-violet-200 transition-colors"
@@ -230,8 +253,25 @@ export function PoemContentView({
               <Trash2 className="w-4 h-4" />
             </button>
           )}
+            </>
+          )}
         </div>
 
+        {/* Read / Recite / Dictate 切换 */}
+        <div className="mt-5">
+          <Segmented<ContentMode>
+            value={contentMode}
+            onChange={(v) => setContentMode(v)}
+            options={[
+              { value: 'read', label: 'Read' },
+              { value: 'recite', label: 'Recite' },
+              { value: 'dictate', label: 'Dictate' },
+            ]}
+          />
+        </div>
+
+        {contentMode === 'read' ? (
+        <>
         {/* 朗读播放器条 */}
         <div className="mt-5 rounded-2xl bg-white/85 border border-gray-100 shadow-sm px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -521,6 +561,16 @@ export function PoemContentView({
           <p className="mt-4 text-xs text-gray-400 text-center">
             Click any line to edit, or use “Edit poem” to rewrite the whole poem at once.
           </p>
+        )}
+        </>
+        ) : contentMode === 'recite' ? (
+          <div className="mt-5">
+            <PoemRecitePanel projectId={project.id} poem={poem} />
+          </div>
+        ) : (
+          <div className="mt-5">
+            <PoemDictatePanel projectId={project.id} poem={poem} />
+          </div>
         )}
       </div>
 

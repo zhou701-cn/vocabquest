@@ -534,3 +534,78 @@ function stopAndClearQueue() {
     round: 0,
   })
 }
+
+/* ============================ 独立单句朗读（背诵/跟读用） ============================ */
+
+export interface PoemSpeakOptions {
+  rate?: number
+  onStart?: () => void
+  onEnd?: () => void
+  /** 不可恢复的错误（如权限/合成不可用）；canceled/interrupted 不触发 */
+  onError?: (err: string) => void
+}
+
+export interface PoemSpeakControl {
+  /** 立即取消本次朗读（迟到回调一并丢弃） */
+  cancel: () => void
+}
+
+let speakSeq = 0
+
+/**
+ * 朗读一段独立文本（背诵“跟读遮罩 / 偷听一句”使用）。
+ * - 会先 cancel 当前一切发声（含列表播放引擎），因此仅应在“练习独占”语境下调用，
+ *   调用方进入练习时需先停掉正常播放器；
+ * - 复用与列表播放一致的中文语音选择与语速语义；
+ * - 将来换云端 TTS，替换此函数即可，两个练习面板无需改动。
+ * 返回 null 表示环境不支持或无可用中文语音。
+ */
+export function speakPoemText(text: string, opts: PoemSpeakOptions = {}): PoemSpeakControl | null {
+  const ss = getSpeechSynthesis()
+  if (!ss || !text.trim()) return null
+  refreshVoiceList()
+  if (!voiceCache) return null
+
+  const seq = ++speakSeq
+  const utter = new SpeechSynthesisUtterance(text)
+  utter.lang = 'zh-CN'
+  utter.voice = voiceCache
+  utter.rate = opts.rate ?? usePoemPlayerStore.getState().rate
+  utter.pitch = 1
+  utter.volume = 1
+
+  // 练习场景独占发声：先清掉正在播的一切（含引擎队列）
+  try {
+    ss.cancel()
+  } catch {
+    /* ignore */
+  }
+
+  utter.onstart = () => {
+    if (speakSeq === seq) opts.onStart?.()
+  }
+  utter.onend = () => {
+    if (speakSeq !== seq) return
+    opts.onEnd?.()
+  }
+  utter.onerror = (ev) => {
+    if (speakSeq !== seq) return
+    const err = (ev as SpeechSynthesisErrorEvent).error
+    if (err === 'canceled' || err === 'interrupted') return
+    opts.onError?.(err)
+  }
+
+  ss.speak(utter)
+  return {
+    cancel: () => {
+      if (speakSeq === seq) {
+        speakSeq += 1
+        try {
+          ss.cancel()
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+  }
+}
