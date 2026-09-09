@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Poem, PoemDraft, PoemImportMode, PoemProject } from '@/types/poem'
 import { autoSplitPoemCards, cleanPoemLines } from '@/lib/poemSplit'
+import { dbDeleteProject, dbSyncProject } from '@/lib/poemDb'
 
 /** 生成唯一 id（优先原生 randomUUID） */
 function makeId(): string {
@@ -63,177 +64,197 @@ export type PoemStore = PoemStoreState & PoemStoreActions
 
 export const usePoemStore = create<PoemStore>()(
   persist(
-    (set) => ({
-      projects: [],
+    (set, get) => {
+      // 把指定项目的最新本地状态同步到 Supabase（demo / 未登录时底层自动 no-op）
+      const syncProject = (id: string) => {
+        const proj = get().projects.find((p) => p.id === id)
+        if (proj) void dbSyncProject(proj)
+      }
 
-      createProject: (input) => {
-        const now = Date.now()
-        const poems: Poem[] = input.poems.map((d, idx) => draftToPoem(d, idx + 1))
-        const project: PoemProject = {
-          id: makeId(),
-          name: input.name.trim() || input.fileName.replace(/\.[^.]+$/, '') || 'Untitled Poem',
-          fileName: input.fileName,
-          format: input.format,
-          poems,
-          createdAt: now,
-          updatedAt: now,
-        }
-        set((state) => ({ projects: [project, ...state.projects] }))
-        return project
-      },
+      return {
+        projects: [],
 
-      renameProject: (id, name) => {
-        const trimmed = name.trim()
-        if (!trimmed) return
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === id ? { ...p, name: trimmed, updatedAt: Date.now() } : p,
-          ),
-        }))
-      },
+        createProject: (input) => {
+          const now = Date.now()
+          const poems: Poem[] = input.poems.map((d, idx) => draftToPoem(d, idx + 1))
+          const project: PoemProject = {
+            id: makeId(),
+            name: input.name.trim() || input.fileName.replace(/\.[^.]+$/, '') || 'Untitled Poem',
+            fileName: input.fileName,
+            format: input.format,
+            poems,
+            createdAt: now,
+            updatedAt: now,
+          }
+          set((state) => ({ projects: [project, ...state.projects] }))
+          void dbSyncProject(project)
+          return project
+        },
 
-      deleteProject: (id) => {
-        set((state) => ({ projects: state.projects.filter((p) => p.id !== id) }))
-      },
+        renameProject: (id, name) => {
+          const trimmed = name.trim()
+          if (!trimmed) return
+          set((state) => ({
+            projects: state.projects.map((p) =>
+              p.id === id ? { ...p, name: trimmed, updatedAt: Date.now() } : p,
+            ),
+          }))
+          syncProject(id)
+        },
 
-      importPoems: (id, drafts, mode) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            const incoming = drafts.map((d, idx) => draftToPoem(d, idx + 1))
-            const poems =
-              mode === 'append'
-                ? [...p.poems, ...incoming]
-                : incoming
-            return { ...p, poems, updatedAt: Date.now() }
-          }),
-        }))
-      },
+        deleteProject: (id) => {
+          set((state) => ({ projects: state.projects.filter((p) => p.id !== id) }))
+          void dbDeleteProject(id)
+        },
 
-      addPoem: (id, draft) => {
-        let createdId: string | undefined
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            const poem = draftToPoem(draft, p.poems.length + 1)
-            createdId = poem.id
-            return { ...p, poems: [...p.poems, poem], updatedAt: Date.now() }
-          }),
-        }))
-        return createdId
-      },
+        importPoems: (id, drafts, mode) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              const incoming = drafts.map((d, idx) => draftToPoem(d, idx + 1))
+              const poems =
+                mode === 'append'
+                  ? [...p.poems, ...incoming]
+                  : incoming
+              return { ...p, poems, updatedAt: Date.now() }
+            }),
+          }))
+          syncProject(id)
+        },
 
-      updatePoemMeta: (id, poemId, meta) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            const poems = p.poems.map((poem) => {
-              if (poem.id !== poemId) return poem
-              const next: Poem = { ...poem }
-              if (meta.title !== undefined) next.title = meta.title.trim()
-              if (meta.author !== undefined) next.author = meta.author.trim() || undefined
-              return next
-            })
-            return { ...p, poems, updatedAt: Date.now() }
-          }),
-        }))
-      },
+        addPoem: (id, draft) => {
+          let createdId: string | undefined
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              const poem = draftToPoem(draft, p.poems.length + 1)
+              createdId = poem.id
+              return { ...p, poems: [...p.poems, poem], updatedAt: Date.now() }
+            }),
+          }))
+          syncProject(id)
+          return createdId
+        },
 
-      deletePoem: (id, poemId) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            return {
-              ...p,
-              poems: p.poems.filter((poem) => poem.id !== poemId),
-              updatedAt: Date.now(),
-            }
-          }),
-        }))
-      },
+        updatePoemMeta: (id, poemId, meta) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              const poems = p.poems.map((poem) => {
+                if (poem.id !== poemId) return poem
+                const next: Poem = { ...poem }
+                if (meta.title !== undefined) next.title = meta.title.trim()
+                if (meta.author !== undefined) next.author = meta.author.trim() || undefined
+                return next
+              })
+              return { ...p, poems, updatedAt: Date.now() }
+            }),
+          }))
+          syncProject(id)
+        },
 
-      movePoem: (id, poemId, dir) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            const from = p.poems.findIndex((poem) => poem.id === poemId)
-            const to = from + dir
-            if (from < 0 || to < 0 || to >= p.poems.length) return p
-            const poems = [...p.poems]
-            const [item] = poems.splice(from, 1)
-            poems.splice(to, 0, item)
-            return { ...p, poems, updatedAt: Date.now() }
-          }),
-        }))
-      },
-
-      setPoemLines: (id, poemId, lines) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            return {
-              ...p,
-              poems: p.poems.map((poem) =>
-                poem.id === poemId
-                  ? { ...poem, lines: cleanPoemLines(lines) }
-                  : poem,
-              ),
-              updatedAt: Date.now(),
-            }
-          }),
-        }))
-      },
-
-      updatePoemLine: (id, poemId, lineIndex, text) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            const poems = p.poems.map((poem) => {
-              if (poem.id !== poemId || lineIndex < 0 || lineIndex >= poem.lines.length) {
-                return poem
+        deletePoem: (id, poemId) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              return {
+                ...p,
+                poems: p.poems.filter((poem) => poem.id !== poemId),
+                updatedAt: Date.now(),
               }
-              const lines = [...poem.lines]
-              lines[lineIndex] = text
-              return { ...poem, lines }
-            })
-            return { ...p, poems, updatedAt: Date.now() }
-          }),
-        }))
-      },
+            }),
+          }))
+          syncProject(id)
+        },
 
-      insertPoemLine: (id, poemId, afterIndex, text) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            const poems = p.poems.map((poem) => {
-              if (poem.id !== poemId) return poem
-              const lines = [...poem.lines]
-              const at = Math.max(0, Math.min(afterIndex + 1, lines.length))
-              lines.splice(at, 0, text)
-              return { ...poem, lines }
-            })
-            return { ...p, poems, updatedAt: Date.now() }
-          }),
-        }))
-      },
+        movePoem: (id, poemId, dir) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              const from = p.poems.findIndex((poem) => poem.id === poemId)
+              const to = from + dir
+              if (from < 0 || to < 0 || to >= p.poems.length) return p
+              const poems = [...p.poems]
+              const [item] = poems.splice(from, 1)
+              poems.splice(to, 0, item)
+              return { ...p, poems, updatedAt: Date.now() }
+            }),
+          }))
+          syncProject(id)
+        },
 
-      deletePoemLine: (id, poemId, lineIndex) => {
-        set((state) => ({
-          projects: state.projects.map((p) => {
-            if (p.id !== id) return p
-            const poems = p.poems.map((poem) => {
-              if (poem.id !== poemId || lineIndex < 0 || lineIndex >= poem.lines.length) {
-                return poem
+        setPoemLines: (id, poemId, lines) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              return {
+                ...p,
+                poems: p.poems.map((poem) =>
+                  poem.id === poemId
+                    ? { ...poem, lines: cleanPoemLines(lines) }
+                    : poem,
+                ),
+                updatedAt: Date.now(),
               }
-              const lines = [...poem.lines]
-              lines.splice(lineIndex, 1)
-              return { ...poem, lines }
-            })
-            return { ...p, poems, updatedAt: Date.now() }
-          }),
-        }))
-      },
-    }),
+            }),
+          }))
+          syncProject(id)
+        },
+
+        updatePoemLine: (id, poemId, lineIndex, text) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              const poems = p.poems.map((poem) => {
+                if (poem.id !== poemId || lineIndex < 0 || lineIndex >= poem.lines.length) {
+                  return poem
+                }
+                const lines = [...poem.lines]
+                lines[lineIndex] = text
+                return { ...poem, lines }
+              })
+              return { ...p, poems, updatedAt: Date.now() }
+            }),
+          }))
+          syncProject(id)
+        },
+
+        insertPoemLine: (id, poemId, afterIndex, text) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              const poems = p.poems.map((poem) => {
+                if (poem.id !== poemId) return poem
+                const lines = [...poem.lines]
+                const at = Math.max(0, Math.min(afterIndex + 1, lines.length))
+                lines.splice(at, 0, text)
+                return { ...poem, lines }
+              })
+              return { ...p, poems, updatedAt: Date.now() }
+            }),
+          }))
+          syncProject(id)
+        },
+
+        deletePoemLine: (id, poemId, lineIndex) => {
+          set((state) => ({
+            projects: state.projects.map((p) => {
+              if (p.id !== id) return p
+              const poems = p.poems.map((poem) => {
+                if (poem.id !== poemId || lineIndex < 0 || lineIndex >= poem.lines.length) {
+                  return poem
+                }
+                const lines = [...poem.lines]
+                lines.splice(lineIndex, 1)
+                return { ...poem, lines }
+              })
+              return { ...p, poems, updatedAt: Date.now() }
+            }),
+          }))
+          syncProject(id)
+        },
+      }
+    },
     {
       name: 'vocabquest:poem-projects',
       version: 3,

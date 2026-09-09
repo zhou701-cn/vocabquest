@@ -4,8 +4,10 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  FileDown,
   FileText,
   FileUp,
+  ListChecks,
   Pause,
   Pencil,
   Play,
@@ -77,7 +79,45 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
   const [addOpen, setAddOpen] = useState(false)
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false)
 
+  // ---------- 多选导出默写单 ----------
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
   const poems = useMemo(() => project.poems ?? [], [project.poems])
+
+  const selectedCount = useMemo(() => {
+    if (selectedIds.size === 0) return 0
+    return poems.filter((p) => selectedIds.has(p.id)).length
+  }, [poems, selectedIds])
+  const allSelected = poems.length > 0 && selectedCount === poems.length
+
+  const toggleSelectPoem = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(poems.map((p) => p.id)))
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
+
+  const exportSelected = () => {
+    if (selectedCount === 0) return
+    const chosen = poems.filter((p) => selectedIds.has(p.id))
+    navigate(`/poem/${project.id}/export?poems=${chosen.map((p) => p.id).join(',')}`)
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
 
   const stats = useMemo(() => {
     const lineCount = poems.reduce((acc, p) => acc + p.lines.length, 0)
@@ -199,6 +239,28 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
               <FileUp className="w-4 h-4" />
               Import More
             </button>
+            <button
+              onClick={() => {
+                if (selectMode) exitSelectMode()
+                else setSelectMode(true)
+              }}
+              disabled={poems.length === 0}
+              title={
+                selectMode
+                  ? 'Exit multi-select'
+                  : poems.length
+                    ? 'Multi-select poems to export a worksheet'
+                    : 'No poems to export'
+              }
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                selectMode
+                  ? 'border-violet-400 bg-violet-100 text-violet-700'
+                  : 'border-gray-200 text-gray-500 hover:border-violet-300 hover:text-violet-700 hover:bg-violet-50'
+              }`}
+            >
+              <ListChecks className="w-4 h-4" />
+              {selectMode ? 'Done' : 'Select to export'}
+            </button>
             {confirmDeleteProject ? (
               <span className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
                 Delete project?
@@ -261,6 +323,42 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
           />
         </div>
 
+        {/* 多选导出操作条 */}
+        {selectMode && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-white/90 border border-violet-200 px-4 py-2.5 shadow-sm">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 accent-violet-600 rounded cursor-pointer"
+              />
+              Select all
+            </label>
+            <span className="text-xs text-gray-500">
+              {selectedCount} of {poems.length} selected
+            </span>
+            {selectedCount > 0 && (
+              <button
+                onClick={clearSelection}
+                className="text-xs font-medium text-gray-400 hover:text-gray-700 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={exportSelected}
+                disabled={selectedCount === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium shadow hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+              >
+                <FileDown className="w-4 h-4" />
+                Export worksheet
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 诗词列表 */}
         {poems.length === 0 ? (
           <div className="mt-10 text-center py-16">
@@ -303,23 +401,44 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
                     playingPoemId === poem.id &&
                     playerStatus !== 'idle'
                   const rowPlaying = rowActive && playerStatus === 'playing'
+                  const selected = selectedIds.has(poem.id)
                   return (
                     <div
                       key={poem.id}
-                      onClick={() => openPoem(poem.id)}
-                      className={`group relative flex items-center gap-4 rounded-xl bg-white/80 border px-4 py-3.5 shadow-sm hover:shadow-md cursor-pointer transition-all ${
-                        rowActive
-                          ? 'border-violet-300 bg-violet-50/60'
-                          : 'border-gray-100 hover:border-violet-200'
+                      onClick={() => {
+                        if (selectMode) toggleSelectPoem(poem.id)
+                        else openPoem(poem.id)
+                      }}
+                      className={`group relative flex items-center gap-4 rounded-xl border px-4 py-3.5 shadow-sm hover:shadow-md cursor-pointer transition-all ${
+                        selectMode
+                          ? selected
+                            ? 'border-violet-400 bg-violet-50/80'
+                            : 'border-gray-200 bg-white/80 hover:border-violet-300'
+                          : rowActive
+                            ? 'border-violet-300 bg-violet-50/60'
+                            : 'border-gray-100 bg-white/80 hover:border-violet-200'
                       }`}
                     >
-                      <div
-                        className={`w-8 shrink-0 text-center text-sm font-bold ${
-                          rowActive ? 'text-violet-500' : 'text-gray-300'
-                        }`}
-                      >
-                        {i + 1}
-                      </div>
+                      {selectMode ? (
+                        <div className="w-8 shrink-0 flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={() => toggleSelectPoem(poem.id)}
+                            aria-label={`Select ${poem.title}`}
+                            className="w-4 h-4 accent-violet-600 rounded cursor-pointer"
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          className={`w-8 shrink-0 text-center text-sm font-bold ${
+                            rowActive ? 'text-violet-500' : 'text-gray-300'
+                          }`}
+                        >
+                          {i + 1}
+                        </div>
+                      )}
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 min-w-0">
@@ -350,57 +469,61 @@ export function PoemProjectDetail({ project, onBack }: PoemProjectDetailProps) {
                         )}
                       </div>
 
-                      <div className="hidden sm:flex items-center gap-3 text-xs text-gray-400 shrink-0">
-                        <span>{poem.lines.filter((l) => l.trim() !== '').length} lines</span>
-                        <span className="text-gray-200">·</span>
-                        <span>
-                          {poem.lines.reduce((n, l) => n + l.length, 0).toLocaleString()} chars
-                        </span>
-                      </div>
+                      {!selectMode && (
+                        <>
+                          <div className="hidden sm:flex items-center gap-3 text-xs text-gray-400 shrink-0">
+                            <span>{poem.lines.filter((l) => l.trim() !== '').length} lines</span>
+                            <span className="text-gray-200">·</span>
+                            <span>
+                              {poem.lines.reduce((n, l) => n + l.length, 0).toLocaleString()} chars
+                            </span>
+                          </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (rowPlaying) {
-                            playerPause()
-                          } else if (rowActive && playerStatus === 'paused') {
-                            playerResume()
-                          } else {
-                            // 搜索过滤后 visiblePoems 的下标 ≠ 项目内真实下标
-                            const realIndex = poems.findIndex((p) => p.id === poem.id)
-                            playerPlayProject(
-                              project.id,
-                              realIndex >= 0 ? realIndex : i,
-                              'list',
-                            )
-                          }
-                        }}
-                        aria-label={rowPlaying ? 'Pause this poem' : 'Play from this poem'}
-                        title={
-                          rowActive
-                            ? rowPlaying
-                              ? '暂停'
-                              : '继续播放'
-                            : '从这首开始顺序播放整本'
-                        }
-                        className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-white shadow transition-all ${
-                          rowPlaying
-                            ? 'bg-violet-500 hover:bg-violet-600'
-                            : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90'
-                        } ${
-                          rowActive
-                            ? 'opacity-100'
-                            : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-                        }`}
-                      >
-                        {rowPlaying ? (
-                          <Pause className="w-3.5 h-3.5" />
-                        ) : (
-                          <Play className="w-3.5 h-3.5 ml-px" />
-                        )}
-                      </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (rowPlaying) {
+                                playerPause()
+                              } else if (rowActive && playerStatus === 'paused') {
+                                playerResume()
+                              } else {
+                                // 搜索过滤后 visiblePoems 的下标 ≠ 项目内真实下标
+                                const realIndex = poems.findIndex((p) => p.id === poem.id)
+                                playerPlayProject(
+                                  project.id,
+                                  realIndex >= 0 ? realIndex : i,
+                                  'list',
+                                )
+                              }
+                            }}
+                            aria-label={rowPlaying ? 'Pause this poem' : 'Play from this poem'}
+                            title={
+                              rowActive
+                                ? rowPlaying
+                                  ? '暂停'
+                                  : '继续播放'
+                                : '从这首开始顺序播放整本'
+                            }
+                            className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-white shadow transition-all ${
+                              rowPlaying
+                                ? 'bg-violet-500 hover:bg-violet-600'
+                                : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90'
+                            } ${
+                              rowActive
+                                ? 'opacity-100'
+                                : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+                            }`}
+                          >
+                            {rowPlaying ? (
+                              <Pause className="w-3.5 h-3.5" />
+                            ) : (
+                              <Play className="w-3.5 h-3.5 ml-px" />
+                            )}
+                          </button>
 
-                      <ArrowRight className="w-4 h-4 shrink-0 text-gray-300 group-hover:text-violet-500 group-hover:translate-x-0.5 transition-all" />
+                          <ArrowRight className="w-4 h-4 shrink-0 text-gray-300 group-hover:text-violet-500 group-hover:translate-x-0.5 transition-all" />
+                        </>
+                      )}
                     </div>
                   )
                 })}

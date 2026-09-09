@@ -8,12 +8,15 @@
 
 // ---- Supabase connection ----
 // Override with VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in .env.local
+// Note: SUPABASE_ANON_KEY accepts either the new Publishable key
+// (sb_publishable_...) or the legacy anon JWT — both map to the low-privilege
+// `anon`/`authenticated` roles and work with supabase-js createClient().
 export const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL?.trim() || 'https://zxxkutexabspjiwghsvn.supabase.co'
+  import.meta.env.VITE_SUPABASE_URL?.trim() || 'https://qqktniubayhipdzlsbke.supabase.co'
 
 export const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eGt1dGV4YWJzcGppd2doc3ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3OTYwNzMsImV4cCI6MjA2ODM3MjA3M30.us8-BQW50RsdhMfMtTPnTshexKBBv7qisCB6sSQEMQk'
+  'sb_publishable_FVSX9xA51ha0XhemPYqANQ_e6lqv9lN'
 
 // ---- Local one-click login (本地一键登录) ----
 // Whether the "local login" button is shown on the auth page.

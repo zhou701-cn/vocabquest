@@ -36,3 +36,115 @@ img {
 .fixed {
   position: fixed;
 }
+
+/* ============ 默写单练习纸（田字格 / 打印） ============ */
+
+.wz-sheet {
+  --wz-cell: 40px;
+  color: #111;
+  background: #fff;
+}
+
+/* 标题行（原样显示） */
+.wz-title {
+  text-align: center;
+  font-size: 2.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  color: #111;
+}
+
+/* 作者/朝代占位行：内容字逐个替换为下划线空格，标点与间隔原样 */
+.wz-author {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #111;
+}
+
+.wz-blank {
+  display: inline-block;
+  width: 0.92em;
+  height: 1.15em;
+  margin: 0.12em 0.16em;
+  border-bottom: 0.14em solid #111;
+}
+
+/* 正文一行：内容字 = 田字格；标点/符号原样显示在格间 */
+.wz-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.wz-cell {
+  display: inline-block;
+  width: var(--wz-cell);
+  height: var(--wz-cell);
+  margin: 4px 3px;
+  box-sizing: border-box;
+  border: 1.5px solid #111;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  /* 中心十字虚格线（格内书写辅助线，可打印） */
+  background-image:
+    linear-gradient(to right, #9ca3af 1px, transparent 1px),
+    linear-gradient(to bottom, #9ca3af 1px, transparent 1px);
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 50% 1px, 1px 50%;
+}
+
+.wz-punct {
+  display: inline-block;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #111;
+  margin: 0 2px;
+}
+
+.wz-gap {
+  display: inline-block;
+  width: calc(var(--wz-cell) * 0.45);
+}
+
+/* 句间空行留白 */
+.wz-stanza {
+  height: var(--wz-cell);
+}
+
+/* 打印分页：每首诗词单独成页（第一首自然从页首开始） */
+.wz-page-break {
+  break-before: page;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html,
+  body,
+  #root {
+    background: #fff !important;
+  }
+
+  /* 抹掉应用壳层的渐变背景，保证 A4 白纸打印 */
+  #root > div {
+    background-image: none !important;
+    background-color: #fff !important;
+  }
+
+  .wz-sheet {
+    box-shadow: none !important;
+  }
+}

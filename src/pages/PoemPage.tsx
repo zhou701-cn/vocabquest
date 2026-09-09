@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BookOpen,
   Check,
+  FileDown,
   FileText,
   FileUp,
   Home,
@@ -24,6 +25,7 @@ import {
 import { PoemProjectDetail } from '@/components/poem/PoemProjectDetail'
 import { PoemContentView } from '@/components/poem/PoemContentView'
 import { PoemFloatingPlayer } from '@/components/poem/PoemFloatingPlayer'
+import { PoemWorksheetPage } from '@/components/poem/PoemWorksheetPage'
 
 const FORMAT_STYLE: Record<PoemProject['format'], string> = {
   pdf: 'bg-red-100 text-red-700',
@@ -49,8 +51,16 @@ export function PoemPage() {
 
   let view: ReactNode
 
+  // 特例：/poem/:projectId/export → 默写单打印预览（poemId 占位 “export”，与 UUID 无冲突）
+  if (projectId && poemId === 'export') {
+    if (!project) {
+      view = <MissingBack title="This project does not exist or was deleted." to="/poem" />
+    } else {
+      view = <PoemWorksheetPage key={`${project.id}:export`} project={project} />
+    }
+  }
   // 三级：单首诗词内容页（自带顶部朗读条，悬浮播放器此处隐藏避免重复）
-  if (projectId && poemId) {
+  else if (projectId && poemId) {
     if (!project) {
       view = <MissingBack title="This project does not exist or was deleted." to="/poem" />
     } else {
@@ -270,6 +280,21 @@ function PoemProjectList() {
                     </div>
                     {!isRenaming && (
                       <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigate(`/poem/${project.id}/export`)
+                          }}
+                          disabled={projectPoems.length === 0}
+                          title={
+                            projectPoems.length
+                              ? 'Export a blank worksheet for every poem in this project'
+                              : 'No poems to export'
+                          }
+                          className="p-1.5 rounded-md text-gray-400 hover:text-violet-600 hover:bg-violet-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <FileDown className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()

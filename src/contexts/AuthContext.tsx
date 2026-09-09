@@ -11,6 +11,7 @@ import {
   LOCAL_LOGIN_GRADE_LEVEL,
 } from '@/lib/config'
 import { User, UserGamification } from '@/types'
+import { hydratePoemStoresFromDb, resetPoemHydration } from '@/lib/poemSync'
 import toast from 'react-hot-toast'
 
 interface AuthContextType {
@@ -219,6 +220,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // 真实登录用户：水合诗词数据（本地→库一次性迁移 + 从库拉取，覆盖本地）
+    void hydratePoemStoresFromDb(userId)
+
     // Check cache first - if data exists and is less than 5 minutes old, use it
     const cached = profileCache.current.get(userId)
     const now = Date.now()
@@ -358,6 +362,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearDemoSession()
       ongoingRequests.current.clear()
       profileCache.current.clear()
+      resetPoemHydration()
       setUser(null)
       setProfile(null)
       setGamification(null)
@@ -374,6 +379,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Clear ongoing requests, cache, and reset state
     ongoingRequests.current.clear()
     profileCache.current.clear()
+    resetPoemHydration()
     setUser(null)
     setProfile(null)
     setGamification(null)

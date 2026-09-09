@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { dbSyncPracticeRecord } from '@/lib/poemDb'
 
 /**
  * 背诵 / 默写进度记忆（本地持久化第一版）。
@@ -106,6 +107,8 @@ export const usePoemPracticeStore = create<PoemPracticeStore>()(
           }
           return { records: { ...state.records, [key]: merged } }
         })
+        const rec = get().records[key]
+        if (rec) void dbSyncPracticeRecord(projectId, poemId, rec)
       },
 
       recordDictateResult: (projectId, poemId, input) => {
@@ -129,6 +132,8 @@ export const usePoemPracticeStore = create<PoemPracticeStore>()(
           }
           return { records: { ...state.records, [key]: merged } }
         })
+        const rec = get().records[key]
+        if (rec) void dbSyncPracticeRecord(projectId, poemId, rec)
       },
     }),
     {
