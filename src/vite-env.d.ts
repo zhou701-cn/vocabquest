@@ -1,10 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** Supabase project URL (optional - falls back to the built-in demo project) */
-  readonly VITE_SUPABASE_URL?: string
-  /** Supabase anon key (optional - falls back to the built-in demo project) */
-  readonly VITE_SUPABASE_ANON_KEY?: string
+  /** API base URL of the self-hosted backend. Defaults to '/api' */
+  readonly VITE_API_BASE_URL?: string
   /** Whether the one-click local login is enabled. Defaults to 'true' */
   readonly VITE_LOCAL_LOGIN_ENABLED?: string
   /** Email used by the one-click local login */

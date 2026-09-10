@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import { VocabularyWord, VocabularyList, UserProgress, LearningMode } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -14,7 +14,7 @@ interface VocabularyStore {
   currentSessionWords: VocabularyWord[]
   sessionMode: LearningMode | null
   reviewWords: VocabularyWord[]
-  
+
   // Actions
   fetchVocabularyLists: () => Promise<void>
   setCurrentList: (list: VocabularyList) => Promise<void>
@@ -44,17 +44,10 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   fetchVocabularyLists: async () => {
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('vocabulary_lists')
-        .select('*')
-        .eq('is_active', true)
-        .order('is_default', { ascending: false })
-        .order('created_at', { ascending: false })
+      const data = await apiFetch<VocabularyList[]>('/vocabulary/lists')
 
-      if (error) throw error
-      
       set({ vocabularyLists: data || [] })
-      
+
       // Set default list as current if none selected
       const defaultList = data?.find(list => list.is_default)
       if (defaultList && !get().currentList) {
@@ -76,14 +69,7 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   fetchWordsForList: async (listId: string) => {
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('vocabulary_words')
-        .select('*')
-        .eq('list_id', listId)
-        .order('sort_order', { ascending: true })
-
-      if (error) throw error
-      
+      const data = await apiFetch<VocabularyWord[]>(`/vocabulary/lists/${listId}/words`)
       set({ words: data || [] })
     } catch (error) {
       console.error('Error fetching words:', error)
@@ -95,18 +81,13 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
 
   fetchUserProgress: async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('user_progress')
-        .select('*')
-        .eq('user_id', userId)
+      const data = await apiFetch<UserProgress[]>('/progress')
 
-      if (error) throw error
-      
       const progressMap = (data || []).reduce((acc, progress) => {
         acc[progress.word_id] = progress
         return acc
       }, {} as Record<string, UserProgress>)
-      
+
       set({ userProgress: progressMap })
     } catch (error) {
       console.error('Error fetching user progress:', error)
@@ -119,9 +100,9 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
 
   startLearningSession: (mode: LearningMode, words?: VocabularyWord[]) => {
     const { words: allWords, userProgress } = get()
-    
+
     let sessionWords: VocabularyWord[]
-    
+
     if (words) {
       sessionWords = words
     } else {
@@ -149,9 +130,9 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
           break
       }
     }
-    
-    set({ 
-      sessionMode: mode, 
+
+    set({
+      sessionMode: mode,
       currentSessionWords: sessionWords,
       currentWord: sessionWords[0] || null
     })
@@ -159,20 +140,20 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
 
   getNextWord: () => {
     const { currentSessionWords, currentWord } = get()
-    
+
     if (!currentWord || currentSessionWords.length === 0) {
       return null
     }
-    
+
     const currentIndex = currentSessionWords.findIndex(w => w.id === currentWord.id)
     const nextIndex = currentIndex + 1
-    
+
     if (nextIndex < currentSessionWords.length) {
       const nextWord = currentSessionWords[nextIndex]
       set({ currentWord: nextWord })
       return nextWord
     }
-    
+
     // Session complete
     set({ currentWord: null, sessionMode: null, currentSessionWords: [] })
     return null
@@ -181,21 +162,19 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   updateProgress: async (wordId: string, isCorrect: boolean, responseTime?: number) => {
     try {
       const { sessionMode } = get()
-      
-      const { data, error } = await supabase.functions.invoke('spaced-repetition', {
-        body: {
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          word_id: wordId,
-          is_correct: isCorrect,
-          response_time_seconds: responseTime,
-          learning_mode: sessionMode
-        }
-      })
 
-      if (error) {
-        console.error('Error updating progress:', error)
-        return
-      }
+      const data = await apiFetch<{ data: { progress: any; points_earned: number } }>(
+        '/progress/spaced-repetition',
+        {
+          method: 'POST',
+          body: {
+            word_id: wordId,
+            is_correct: isCorrect,
+            response_time_seconds: responseTime,
+            learning_mode: sessionMode,
+          },
+        },
+      )
 
       // Update local progress state
       if (data?.data?.progress) {
@@ -238,13 +217,10 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
 
   getWordsForReview: async (userId: string) => {
     try {
-      // Try to use the database function first
-      const { data, error } = await supabase.rpc('get_words_for_review', {
-        p_user_id: userId,
-        p_limit: 20
-      })
+      // Try to use the server-side review function first
+      const data = await apiFetch<VocabularyWord[]>('/progress/review-words?limit=20')
 
-      if (!error && data && data.length > 0) {
+      if (data && data.length > 0) {
         set({ reviewWords: data })
         return data
       }
@@ -281,7 +257,7 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   getRandomWords: (count: number, excludeIds: string[] = []) => {
     const { words } = get()
     const availableWords = words.filter(word => !excludeIds.includes(word.id))
-    
+
     // Shuffle and take requested count
     const shuffled = [...availableWords].sort(() => Math.random() - 0.5)
     return shuffled.slice(0, count)

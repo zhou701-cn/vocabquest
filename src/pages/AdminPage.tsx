@@ -20,7 +20,7 @@ import {
   AlertCircle,
   Loader
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { apiFetch } from '../lib/api'
 import { VocabularyWord, VocabularyList } from '../types'
 
 interface WordFormData {
@@ -194,14 +194,8 @@ export function AdminPage() {
 
   const loadVocabularyLists = async () => {
     try {
-      const { data, error } = await supabase
-        .from('vocabulary_lists')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
+      const data = await apiFetch<VocabularyList[]>('/vocabulary/lists')
 
-      if (error) throw error
-      
       setVocabularyLists(data || [])
       if (data && data.length > 0 && !selectedListId) {
         setSelectedListId(data[0].id)
@@ -217,7 +211,8 @@ export function AdminPage() {
     
     setIsLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('admin-word-manager', {
+      const data = await apiFetch('/admin/word-manager', {
+        method: 'POST',
         body: {
           action: 'get_words',
           data: {
@@ -230,8 +225,6 @@ export function AdminPage() {
         }
       })
 
-      if (error) throw error
-      
       if (data?.data?.words) {
         setWords(data.data.words)
       }
@@ -248,7 +241,8 @@ export function AdminPage() {
     
     setIsLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('admin-word-manager', {
+      const data = await apiFetch('/admin/word-manager', {
+        method: 'POST',
         body: {
           action: 'search_words',
           data: {
@@ -259,8 +253,6 @@ export function AdminPage() {
         }
       })
 
-      if (error) throw error
-      
       if (data?.data?.words) {
         setWords(data.data.words)
       }
@@ -280,15 +272,14 @@ export function AdminPage() {
 
     setGeneratingAI(true)
     try {
-      const { data, error } = await supabase.functions.invoke('ai-word-generator-gemini', {
+      const data = await apiFetch('/ai/generate-word', {
+        method: 'POST',
         body: {
           word: newWord.trim(),
           targetGrade: 4
         }
       })
 
-      if (error) throw error
-      
       if (data?.data) {
         setGeneratedData(data.data)
         setFormData({
@@ -323,7 +314,8 @@ export function AdminPage() {
     setIsLoading(true)
     try {
       // Generate audio URL
-      const audioResponse = await supabase.functions.invoke('word-audio-generator', {
+      const audioResponse = await apiFetch('/ai/word-audio', {
+        method: 'POST',
         body: {
           word: formData.word,
           wordId: Date.now()
@@ -342,7 +334,8 @@ export function AdminPage() {
         antonyms: formData.antonyms.filter(s => s.trim())
       }
 
-      const { data, error } = await supabase.functions.invoke('admin-word-manager', {
+      await apiFetch('/admin/word-manager', {
+        method: 'POST',
         body: {
           action: 'add_word',
           data: {
@@ -352,8 +345,6 @@ export function AdminPage() {
         }
       })
 
-      if (error) throw error
-      
       showNotification('success', 'Word added successfully!')
       setShowAddModal(false)
       resetForm()
@@ -380,7 +371,8 @@ export function AdminPage() {
         antonyms: formData.antonyms.filter(s => s.trim())
       }
 
-      const { data, error } = await supabase.functions.invoke('admin-word-manager', {
+      await apiFetch('/admin/word-manager', {
+        method: 'POST',
         body: {
           action: 'update_word',
           data: {
@@ -390,8 +382,6 @@ export function AdminPage() {
         }
       })
 
-      if (error) throw error
-      
       showNotification('success', 'Word updated successfully!')
       setShowEditModal(false)
       setEditingWord(null)
@@ -410,7 +400,8 @@ export function AdminPage() {
 
     setIsLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('admin-word-manager', {
+      await apiFetch('/admin/word-manager', {
+        method: 'POST',
         body: {
           action: 'delete_word',
           data: {
@@ -420,8 +411,6 @@ export function AdminPage() {
         }
       })
 
-      if (error) throw error
-      
       showNotification('success', 'Word deleted successfully!')
       loadWords()
     } catch (error) {
@@ -533,12 +522,14 @@ export function AdminPage() {
           const cleanWord = word.trim()
           if (cleanWord) {
             // Generate AI content for each word
-            const { data: aiData } = await supabase.functions.invoke('ai-word-generator-gemini', {
+            const aiData = await apiFetch('/ai/generate-word', {
+              method: 'POST',
               body: { word: cleanWord, targetGrade: 4 }
             })
-            
+
             if (aiData?.data) {
-              const audioResponse = await supabase.functions.invoke('word-audio-generator', {
+              const audioResponse = await apiFetch('/ai/word-audio', {
+                method: 'POST',
                 body: { word: cleanWord, wordId: Date.now() + Math.random() }
               })
               
@@ -588,7 +579,8 @@ export function AdminPage() {
       }
 
       // Import words using the bulk import function
-      const { data, error } = await supabase.functions.invoke('admin-word-manager', {
+      await apiFetch('/admin/word-manager', {
+        method: 'POST',
         body: {
           action: 'bulk_import',
           data: {
@@ -598,8 +590,6 @@ export function AdminPage() {
         }
       })
 
-      if (error) throw error
-      
       showNotification('success', `Successfully imported ${wordsToImport.length} words!`)
       setShowBulkImportModal(false)
       setBulkImportText('')

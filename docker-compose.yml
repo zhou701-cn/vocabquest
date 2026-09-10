@@ -1,0 +1,52 @@
+# VocabQuest 一体化部署（ECS 单机）
+# 用法：
+#   1. cp .env.deploy.example .env.deploy 并修改密码/密钥
+#   2. docker compose --env-file .env.deploy up -d --build
+# 数据库首次启动会自动执行 server/db/schema.sql 完成初始化。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: vocabquest
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./server/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d vocabquest']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: vocabquest
+      JWT_SECRET: ${JWT_SECRET:-please-change-me-in-production}
+      JWT_EXPIRES_IN: 7d
+      PORT: 3001
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 前端：镜像只拷贝本地构建好的 dist，不在服务器上执行 vite build。
+  # 因此每次更新前端，需先在本地执行 ./deploy/build-web.sh（或 deploy-from-local.sh）再 up --build。
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

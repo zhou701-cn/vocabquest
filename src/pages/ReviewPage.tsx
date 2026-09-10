@@ -25,7 +25,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { AchievementNotification, REVIEW_ACHIEVEMENTS } from '@/components/AchievementNotification'
 import { SessionSummary } from '@/components/SessionSummary'
 import { VocabularyWord, ReviewMode, ReviewSession, Achievement } from '@/types'
-import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 export function ReviewPage() {
@@ -67,16 +67,8 @@ export function ReviewPage() {
 
     try {
       // Get session count for achievement tracking
-      const today = new Date().toISOString().split('T')[0]
-      const { data: sessionData } = await supabase
-        .from('learning_sessions')
-        .select('id')
-        .eq('user_id', user.id)
-        .gte('session_start', `${today}T00:00:00Z`)
-        .eq('mode', 'review')
-        .eq('is_completed', true)
-      
-      setCompletedSessionsToday(sessionData?.length || 0)
+      const { count } = await apiFetch<{ count: number }>('/sessions/today-count?mode=review')
+      setCompletedSessionsToday(count || 0)
     } catch (error) {
       console.error('Error loading session count:', error)
     }
@@ -291,21 +283,23 @@ export function ReviewPage() {
       const sessionDuration = Math.round((new Date().getTime() - reviewSession.startTime.getTime()) / 1000 / 60)
       const accuracy = Math.round((reviewSession.correctAnswers / reviewSession.totalWords) * 100)
       
-      await supabase.from('learning_sessions').insert({
-        user_id: user!.id,
-        mode: 'review',
-        duration_minutes: sessionDuration,
-        words_studied: reviewSession.totalWords,
-        words_correct: reviewSession.correctAnswers,
-        accuracy_percentage: accuracy,
-        points_earned: reviewSession.pointsEarned,
-        metadata: {
-          max_streak: reviewSession.maxStreak,
-          quick_answers: reviewSession.quickAnswers,
-          review_mode: reviewMode
-        },
-        session_end: new Date().toISOString(),
-        is_completed: true
+      await apiFetch('/sessions', {
+        method: 'POST',
+        body: {
+          mode: 'review',
+          duration_minutes: sessionDuration,
+          words_studied: reviewSession.totalWords,
+          words_correct: reviewSession.correctAnswers,
+          accuracy_percentage: accuracy,
+          points_earned: reviewSession.pointsEarned,
+          metadata: {
+            max_streak: reviewSession.maxStreak,
+            quick_answers: reviewSession.quickAnswers,
+            review_mode: reviewMode
+          },
+          session_end: new Date().toISOString(),
+          is_completed: true
+        }
       })
       
       // Refresh data

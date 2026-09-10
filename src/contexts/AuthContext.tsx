@@ -1,21 +1,23 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react'
-import { User as SupabaseUser } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
 import {
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY,
+  apiFetch,
+  readAuthSession,
+  writeAuthSession,
+  clearAuthSession,
+} from '@/lib/api'
+import {
   LOCAL_LOGIN_ENABLED,
   LOCAL_LOGIN_EMAIL,
   LOCAL_LOGIN_FULL_NAME,
   LOCAL_LOGIN_ROLE,
   LOCAL_LOGIN_GRADE_LEVEL,
 } from '@/lib/config'
-import { User, UserGamification } from '@/types'
+import { AuthUser, User, UserGamification } from '@/types'
 import { hydratePoemStoresFromDb, resetPoemHydration } from '@/lib/poemSync'
 import toast from 'react-hot-toast'
 
 interface AuthContextType {
-  user: SupabaseUser | null
+  user: AuthUser | null
   profile: User | null
   gamification: UserGamification | null
   loading: boolean
@@ -33,16 +35,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // ---------------------------------------------------------------------------
 // Local demo mode (绕过接口的本地一键登录)
 // ---------------------------------------------------------------------------
-// When the Supabase auth API is unreachable or the demo account cannot be
-// created, the "Continue as Demo Student" button falls back to a purely local
-// session: no network request is made at all. The session is persisted in
-// localStorage so the demo user stays signed in across page reloads.
+// When the API server is unreachable, the "Continue as Demo Student" button
+// falls back to a purely local session: no network request is made at all.
+// The session is persisted in localStorage so the demo user stays signed in
+// across page reloads.
 const DEMO_SESSION_KEY = 'vocabquest:demo-session'
 // Stable demo user id (valid UUID format so DB queries that use it keep working).
 const DEMO_USER_ID = '00000000-0000-4000-8000-00000000d001'
 
 interface DemoSession {
-  user: SupabaseUser
+  user: AuthUser
   profile: User
   gamification: UserGamification
 }
@@ -52,21 +54,13 @@ function buildDemoSession(): DemoSession {
   const fullName = LOCAL_LOGIN_FULL_NAME || 'Demo Student'
   const now = new Date().toISOString()
 
-  const user = {
+  const user: AuthUser = {
     id: DEMO_USER_ID,
-    aud: 'authenticated',
-    role: 'authenticated',
     email,
-    email_confirmed_at: now,
-    phone: '',
-    confirmed_at: now,
-    last_sign_in_at: now,
-    app_metadata: { provider: 'local', providers: ['local'] },
-    user_metadata: { full_name: fullName, role: LOCAL_LOGIN_ROLE },
-    identities: [],
+    full_name: fullName,
+    role: LOCAL_LOGIN_ROLE,
     created_at: now,
-    updated_at: now,
-  } as unknown as SupabaseUser
+  }
 
   const profile: User = {
     id: DEMO_USER_ID,
@@ -132,21 +126,19 @@ function isDemoSessionActive(): boolean {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState<User | null>(null)
   const [gamification, setGamification] = useState<UserGamification | null>(null)
   const [loading, setLoading] = useState(true)
-  
+
   // Request deduplication: track ongoing profile requests by userId
   const ongoingRequests = useRef<Map<string, Promise<any>>>(new Map())
-  
+
   // Profile data cache: store profile data in memory to avoid redundant API calls
   const profileCache = useRef<Map<string, { profile: User; gamification: UserGamification; timestamp: number }>>(new Map())
 
   // Load user on mount
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout
-
     // Demo mode: restore the local session without touching the network at all.
     const demoSession = readDemoSession()
     if (demoSession) {
@@ -159,54 +151,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     async function loadUser() {
+      // Safety timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.warn('Auth loading timeout - forcing loading to false')
+        setLoading(false)
+      }, 5000)
+
       try {
-        // Set a safety timeout to prevent infinite loading
-        timeoutId = setTimeout(() => {
-          console.warn('Auth loading timeout - forcing loading to false')
-          setLoading(false)
-        }, 5000) // 5 seconds timeout
-        
-        const { data: { user } } = await supabase.auth.getUser()
-        setUser(user)
-        
-        if (user) {
-          await loadUserProfile(user.id)
-        }
+        const session = readAuthSession()
+        if (!session) return
+
+        setUser(session.user)
+        await loadUserProfile(session.user.id)
       } catch (error) {
         console.error('Error loading user:', error)
+        // Token 无效时 apiFetch 已清理会话
+        clearAuthSession()
+        setUser(null)
       } finally {
         clearTimeout(timeoutId)
         setLoading(false)
       }
     }
-    
+
     loadUser()
-
-    // Set up auth listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const currentUser = session?.user || null
-        setUser(currentUser)
-        
-        if (currentUser) {
-          setLoading(true)
-          try {
-            await loadUserProfile(currentUser.id)
-          } finally {
-            setLoading(false)
-          }
-        } else {
-          setProfile(null)
-          setGamification(null)
-          setLoading(false)
-        }
-      }
-    )
-
-    return () => {
-      subscription.unsubscribe()
-      if (timeoutId) clearTimeout(timeoutId)
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadUserProfile = async (userId: string) => {
@@ -227,9 +196,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cached = profileCache.current.get(userId)
     const now = Date.now()
     const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
-    
-    if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      console.log('Using cached profile data for user:', userId)
+
+    if (cached && now - cached.timestamp < CACHE_DURATION) {
       setProfile(cached.profile)
       setGamification(cached.gamification)
       return
@@ -238,103 +206,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check if there's already an ongoing request for this user
     const existingRequest = ongoingRequests.current.get(userId)
     if (existingRequest) {
-      console.log('Profile request already in progress for user:', userId)
       return existingRequest
     }
 
-    // Create new request
     const requestPromise = (async () => {
       try {
-        console.log('Loading user profile for:', userId)
-        
-        // Use direct fetch instead of supabase.functions.invoke (which hangs)
-        // Use the anon key for now - the function will extract user ID from the request context
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/user-profile`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'X-User-ID': userId // Pass the user ID directly
-          }
-        })
-
-        const data = await response.json()
-        const error = response.ok ? null : new Error(`HTTP ${response.status}`)
-
-        if (error) {
-          console.error('Error loading user profile:', error)
-          // Don't throw error, just log it - user can still use the app
-          return
-        }
+        const data = await apiFetch<{ data: { profile: User; gamification: UserGamification } }>(
+          '/users/me',
+        )
 
         if (data?.data) {
           const profileData = {
             profile: data.data.profile,
             gamification: data.data.gamification,
-            timestamp: now
+            timestamp: now,
           }
-          
-          // Cache the data
+
           profileCache.current.set(userId, profileData)
-          
-          // Set the state
           setProfile(profileData.profile)
           setGamification(profileData.gamification)
-          
-          console.log('Profile loaded and cached for user:', userId)
         }
       } catch (error) {
         console.error('Error loading user profile:', error)
-        // Don't throw error, just log it - user can still use the app
+        // Don't throw - user can still use the app
       } finally {
-        // Remove the request from ongoing requests
         ongoingRequests.current.delete(userId)
       }
     })()
 
-    // Store the request promise
     ongoingRequests.current.set(userId, requestPromise)
-    
     return requestPromise
   }
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
+    try {
+      const data = await apiFetch<{ token: string; user: AuthUser }>(
+        '/auth/login',
+        { method: 'POST', body: { email, password } },
+      )
 
-    if (error) {
-      toast.error(error.message)
+      writeAuthSession({ token: data.token, user: data.user })
+      setUser(data.user)
+      await loadUserProfile(data.user.id)
+
+      toast.success('Welcome back!')
+      return data
+    } catch (error) {
+      toast.error((error as Error).message)
       throw error
     }
-
-    toast.success('Welcome back!')
-    return data
   }
 
   const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.protocol}//${window.location.host}/auth/callback`
-      }
-    })
+    try {
+      const data = await apiFetch<{ token: string; user: AuthUser }>(
+        '/auth/register',
+        { method: 'POST', body: { email, password } },
+      )
 
-    if (error) {
-      toast.error(error.message)
+      writeAuthSession({ token: data.token, user: data.user })
+      setUser(data.user)
+      await loadUserProfile(data.user.id)
+
+      toast.success('Account created successfully!')
+      return data
+    } catch (error) {
+      toast.error((error as Error).message)
       throw error
     }
-
-    toast.success('Check your email to confirm your account!')
-    return data
   }
 
   /**
    * One-click local/demo login that completely bypasses the auth API.
    * The user/session is created locally (in memory + localStorage) so the
-   * login works even when the Supabase auth endpoint is unreachable.
+   * login works even when the API server is unreachable.
    */
   const localSignIn = async () => {
     if (!LOCAL_LOGIN_ENABLED) {
@@ -352,31 +297,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setGamification(demoSession.gamification)
 
     toast.success(`Welcome, ${demoSession.profile.full_name}!`)
-    return { user: demoSession.user, session: null }
+    return { user: demoSession.user }
   }
 
   const signOut = async () => {
-    // Demo mode: just clear the local session (no network call, the auth
-    // API may be unreachable which would otherwise block sign-out).
+    // Demo mode: just clear the local session.
     if (isDemoSessionActive()) {
       clearDemoSession()
-      ongoingRequests.current.clear()
-      profileCache.current.clear()
-      resetPoemHydration()
-      setUser(null)
-      setProfile(null)
-      setGamification(null)
-      toast.success('Signed out successfully')
-      return
     }
+    clearAuthSession()
 
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      toast.error(error.message)
-      throw error
-    }
-    
-    // Clear ongoing requests, cache, and reset state
     ongoingRequests.current.clear()
     profileCache.current.clear()
     resetPoemHydration()
@@ -409,36 +339,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Update profile directly in the database
-      const { data, error } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', user.id)
-        .select()
-        .single()
+      const data = await apiFetch<{ data: User }>('/users/me', {
+        method: 'PATCH',
+        body: updates,
+      })
 
-      if (error) {
-        console.error('Database error updating profile:', error)
-        toast.error('Failed to update profile')
-        throw error
-      }
-
-      if (data) {
-        // Update local state
-        setProfile(data)
-        // Clear cache to force refresh on next load
+      if (data?.data) {
+        setProfile(data.data)
         profileCache.current.delete(user.id)
         toast.success('Profile updated successfully!')
       }
     } catch (error) {
       console.error('Error updating profile:', error)
+      toast.error('Failed to update profile')
       throw error
     }
   }
 
   const refreshProfile = async () => {
     if (user) {
-      // Clear cache and ongoing request for this user to force a fresh request
       profileCache.current.delete(user.id)
       ongoingRequests.current.delete(user.id)
       await loadUserProfile(user.id)
@@ -452,34 +371,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Resolve the target user id explicitly: the React state may not have
-      // been updated yet right after a sign-in, so prefer the passed id.
       const currentUserId = targetUserId || user?.id
       if (!currentUserId) {
         throw new Error('No user logged in')
       }
 
-      // Use direct fetch instead of supabase.functions.invoke (which hangs)
-      // Use the anon key and pass user ID in header
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/user-initialize`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'X-User-ID': currentUserId // Pass the user ID directly
-        },
-        body: JSON.stringify(profileData)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        console.error('Error initializing user:', data)
-        throw new Error(`HTTP ${response.status}: ${data.message || 'Unknown error'}`)
-      }
+      const data = await apiFetch<{ data: { is_new_user: boolean } }>(
+        '/users/initialize',
+        { method: 'POST', body: profileData },
+      )
 
       if (data?.data?.is_new_user) {
-        // Clear cache to force reload of profile data
         profileCache.current.delete(currentUserId)
         await loadUserProfile(currentUserId)
         toast.success('Welcome! Your account has been set up.')
@@ -503,14 +405,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     updateProfile,
     refreshProfile,
-    initializeUser
+    initializeUser,
   }
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

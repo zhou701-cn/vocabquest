@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/config'
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+// 已废弃：Supabase 客户端已移除，所有数据访问请使用 @/lib/api 中的 apiFetch。
+// 本文件保留为空模块以避免残留引用报错，后续可安全删除。
+export {}

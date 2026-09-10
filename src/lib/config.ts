@@ -6,17 +6,10 @@
  * keep the app working when a variable is not provided.
  */
 
-// ---- Supabase connection ----
-// Override with VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in .env.local
-// Note: SUPABASE_ANON_KEY accepts either the new Publishable key
-// (sb_publishable_...) or the legacy anon JWT — both map to the low-privilege
-// `anon`/`authenticated` roles and work with supabase-js createClient().
-export const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL?.trim() || 'https://qqktniubayhipdzlsbke.supabase.co'
-
-export const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() ||
-  'sb_publishable_FVSX9xA51ha0XhemPYqANQ_e6lqv9lN'
+// ---- API server ----
+// Override with VITE_API_BASE_URL in .env.local.
+// Default '/api' works with the Vite dev proxy and the production nginx setup.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
 
 // ---- Local one-click login (本地一键登录) ----
 // Whether the "local login" button is shown on the auth page.
@@ -25,8 +18,7 @@ export const LOCAL_LOGIN_ENABLED =
   (import.meta.env.VITE_LOCAL_LOGIN_ENABLED ?? 'true').trim().toLowerCase() !== 'false'
 
 // Credentials used by the one-click local login. Keep them in .env.local
-// (never commit real secrets). When no user exists yet for this email the
-// sign-in flow will try to register it automatically (see AuthContext).
+// (never commit real secrets).
 export const LOCAL_LOGIN_EMAIL = import.meta.env.VITE_LOCAL_LOGIN_EMAIL?.trim() || ''
 export const LOCAL_LOGIN_PASSWORD = import.meta.env.VITE_LOCAL_LOGIN_PASSWORD || ''
 

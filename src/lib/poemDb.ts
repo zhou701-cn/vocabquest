@@ -1,14 +1,13 @@
 /**
- * 诗词数据 → Supabase 的数据访问层（纯函数，不依赖任何 store，避免循环依赖）。
+ * 诗词数据 → 自建后端 API 的数据访问层（纯函数，不依赖任何 store，避免循环依赖）。
  *
  * 规则：
  *  - 所有读写都先解析「真实登录用户 id」；本地 demo 账号 / 未登录时一律 no-op
  *    （返回 null 或直接返回），只有真实登录用户才落库；
- *  - 表已开启 RLS（auth.uid() = user_id），真实用户只能读写自己的数据；
- *  - 与现有库一致：user_id 不加外键，因此 demo 的固定 UUID 也不会触发外键错误。
+ *  - 服务端通过 JWT 鉴权，用户只能读写自己的数据。
  */
 
-import { supabase } from '@/lib/supabase'
+import { apiFetch, readAuthSession } from '@/lib/api'
 import type { Poem, PoemProject } from '@/types/poem'
 import type { PoemPracticeRecord } from '@/stores/poemPracticeStore'
 
@@ -31,14 +30,7 @@ function isDemoActive(): boolean {
 /** 真实登录用户 id；demo / 未登录返回 null */
 export async function getRealUserId(): Promise<string | null> {
   if (isDemoActive()) return null
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    return session?.user?.id ?? null
-  } catch {
-    return null
-  }
+  return readAuthSession()?.user?.id ?? null
 }
 
 /* ------------------------------ 类型转换 ------------------------------ */
@@ -56,42 +48,22 @@ export async function dbSyncProject(project: PoemProject): Promise<void> {
   const userId = await getRealUserId()
   if (!userId) return
   try {
-    const { error: pErr } = await supabase.from('poem_projects').upsert({
-      id: project.id,
-      user_id: userId,
-      name: project.name,
-      file_name: project.fileName,
-      format: project.format,
-      created_at: toIso(project.createdAt),
-      updated_at: toIso(project.updatedAt),
-    })
-    if (pErr) throw pErr
-
-    if (project.poems.length > 0) {
-      const rows = project.poems.map((poem, idx) => ({
-        id: poem.id,
-        project_id: project.id,
-        user_id: userId,
-        title: poem.title,
-        author: poem.author ?? null,
-        lines: poem.lines,
-        sort_order: idx,
+    await apiFetch(`/poems/projects/${project.id}`, {
+      method: 'PUT',
+      body: {
+        name: project.name,
+        file_name: project.fileName,
+        format: project.format,
+        created_at: toIso(project.createdAt),
         updated_at: toIso(project.updatedAt),
-      }))
-      const { error: wErr } = await supabase.from('poems').upsert(rows)
-      if (wErr) throw wErr
-
-      // 删除本地已移除的诗词（保留 id 的诗词不动，保证其练习进度不被级联删除）
-      const quoted = project.poems.map((p) => `"${p.id}"`).join(',')
-      await supabase
-        .from('poems')
-        .delete()
-        .eq('project_id', project.id)
-        .not('id', 'in', `(${quoted})`)
-    } else {
-      // 项目下没有诗词了，清空
-      await supabase.from('poems').delete().eq('project_id', project.id)
-    }
+        poems: project.poems.map((poem) => ({
+          id: poem.id,
+          title: poem.title,
+          author: poem.author ?? null,
+          lines: poem.lines,
+        })),
+      },
+    })
   } catch (e) {
     console.warn('[poemDb] syncProject failed:', e)
   }
@@ -102,7 +74,7 @@ export async function dbDeleteProject(projectId: string): Promise<void> {
   const userId = await getRealUserId()
   if (!userId) return
   try {
-    await supabase.from('poem_projects').delete().eq('id', projectId)
+    await apiFetch(`/poems/projects/${projectId}`, { method: 'DELETE' })
   } catch (e) {
     console.warn('[poemDb] deleteProject failed:', e)
   }
@@ -113,19 +85,9 @@ export async function dbFetchLibrary(): Promise<PoemProject[] | null> {
   const userId = await getRealUserId()
   if (!userId) return null
   try {
-    const { data: projects, error: pErr } = await supabase
-      .from('poem_projects')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-    if (pErr) throw pErr
-
-    const { data: poems, error: wErr } = await supabase
-      .from('poems')
-      .select('*')
-      .eq('user_id', userId)
-      .order('sort_order', { ascending: true })
-    if (wErr) throw wErr
+    const { projects, poems } = await apiFetch<{ projects: any[]; poems: any[] }>(
+      '/poems/library',
+    )
 
     const byProject = new Map<string, Poem[]>()
     for (const row of poems ?? []) {
@@ -166,19 +128,16 @@ export async function dbSyncPracticeRecord(
   const userId = await getRealUserId()
   if (!userId) return
   try {
-    const { error } = await supabase.from('poem_practice_records').upsert(
-      {
-        user_id: userId,
-        poem_id: poemId,
+    await apiFetch(`/poems/practice/${poemId}`, {
+      method: 'PUT',
+      body: {
         project_id: projectId,
         fingerprint: record.fingerprint,
         recite: record.recite ?? null,
         dictate: record.dictate ?? null,
         updated_at: toIso(record.updatedAt),
       },
-      { onConflict: 'user_id,poem_id' },
-    )
-    if (error) throw error
+    })
   } catch (e) {
     console.warn('[poemDb] syncPracticeRecord failed:', e)
   }
@@ -189,11 +148,7 @@ export async function dbFetchPractice(): Promise<Record<string, PoemPracticeReco
   const userId = await getRealUserId()
   if (!userId) return null
   try {
-    const { data, error } = await supabase
-      .from('poem_practice_records')
-      .select('*')
-      .eq('user_id', userId)
-    if (error) throw error
+    const data = await apiFetch<any[]>('/poems/practice')
 
     const map: Record<string, PoemPracticeRecord> = {}
     for (const row of data ?? []) {
@@ -214,7 +169,7 @@ export async function dbFetchPractice(): Promise<Record<string, PoemPracticeReco
 /* ------------------------------ 一次性迁移 ------------------------------ */
 
 /**
- * 把 localStorage 里的诗词库与练习进度一次性迁移到 Supabase。
+ * 把 localStorage 里的诗词库与练习进度一次性迁移到服务端。
  * 按用户标记，避免重复导入；单条失败不中断整体。demo / 未登录时 no-op。
  */
 export async function dbMigrateLocal(): Promise<void> {

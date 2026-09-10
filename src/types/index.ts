@@ -1,3 +1,12 @@
+// Auth Types（自建后端登录会话中的用户基本信息）
+export interface AuthUser {
+  id: string
+  email: string
+  full_name?: string
+  role?: string
+  created_at?: string
+}
+
 // Database Types
 export interface User {
   id: string

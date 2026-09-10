@@ -21,6 +21,13 @@ export default defineConfig({
   server: {
     host: 'localhost',
     port: 5173,
+    proxy: {
+      // 开发环境将 /api 代理到本地 NestJS 后端
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
     watch: {
       // 轮询检测文件变化：避免部分文件系统上 fs 事件丢失，
       // 导致修改代码后 HMR / 页面刷新仍显示旧代码（需重启才生效）的问题
