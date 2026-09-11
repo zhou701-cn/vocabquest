@@ -88,7 +88,7 @@ export function HomePage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-3">
               <BookOpen className="w-8 h-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-800">VocabQuest</h1>
+              <h1 className="text-2xl font-bold text-gray-800">NatureSpace</h1>
             </div>
             
             <div className="relative">

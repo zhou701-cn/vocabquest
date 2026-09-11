@@ -342,7 +342,7 @@ export async function buildPoemWorksheetDocx(poems: Poem[]): Promise<Blob> {
   })
 
   const doc = new Document({
-    creator: 'VocabQuest',
+    creator: 'NatureSpace',
     sections: [
       {
         properties: {

@@ -76,41 +76,15 @@ export function AuthPage() {
               </div>
               
               <h1 className="text-4xl font-bold text-gray-800 mb-4">
-                Welcome to <span className="text-blue-600">VocabQuest</span>
+                Welcome to <span className="text-blue-600">NatureSpace</span>
               </h1>
               
               <p className="text-xl text-gray-600 mb-8">
-                Master SSAT vocabulary through fun, interactive learning adventures!
+                fun, interactive learning adventures!
               </p>
             </motion.div>
 
             {/* Features Grid */}
-            <motion.div 
-              className="grid grid-cols-2 gap-4 mb-8"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.6 }}
-            >
-              <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <Trophy className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-700">Earn Badges & XP</p>
-              </div>
-              
-              <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <Target className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-700">Daily Challenges</p>
-              </div>
-              
-              <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-700">Learn Together</p>
-              </div>
-              
-              <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <Star className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-700">200+ Words</p>
-              </div>
-            </motion.div>
           </div>
         </div>
 
