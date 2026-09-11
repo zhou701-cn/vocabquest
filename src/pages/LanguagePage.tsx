@@ -248,42 +248,7 @@ export function LanguagePage() {
               </div>
             </motion.div>
 
-            {/* Current List */}
-            <motion.div 
-              className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4, duration: 0.6 }}
-            >
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Current List</h3>
-              {currentList ? (
-                <div>
-                  <h4 className="font-medium text-gray-800">{currentList.name}</h4>
-                  <p className="text-sm text-gray-600 mt-1">{currentList.description}</p>
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-                    <span className="text-sm text-gray-600">Words</span>
-                    <span className="font-bold">{currentList.word_count}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Difficulty</span>
-                    <div className="flex space-x-1">
-                      {[...Array(5)].map((_, i) => (
-                        <Star 
-                          key={i} 
-                          className={`w-3 h-3 ${
-                            i < currentList.difficulty_level 
-                              ? 'text-yellow-400 fill-current' 
-                              : 'text-gray-300'
-                          }`} 
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm">No vocabulary list selected</p>
-              )}
-            </motion.div>
+           
 
           </div>
         </div>

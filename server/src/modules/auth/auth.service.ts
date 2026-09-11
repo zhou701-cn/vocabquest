@@ -64,6 +64,18 @@ export class AuthService {
     return this.buildAuthResponse(user)
   }
 
+  async resetPassword(email: string, newPassword: string) {
+    const user = await this.users.findOne({ where: { email } })
+    if (user) {
+      await this.users.update(user.id, {
+        password_hash: await bcrypt.hash(newPassword, 10),
+        updated_at: new Date(),
+      })
+    }
+    // 无论邮箱是否存在都返回成功，避免被枚举
+    return { message: '如果该邮箱已注册，密码已重置，请用新密码登录。' }
+  }
+
   private async createDefaultGamification(userId: string) {
     const today = new Date().toISOString().split('T')[0]
     await this.gamification.save(
