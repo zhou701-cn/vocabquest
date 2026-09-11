@@ -268,7 +268,7 @@ export function AuthPage() {
                     </button>
                   </form>
 
-                  {LOCAL_LOGIN_ENABLED && (
+                  {false && LOCAL_LOGIN_ENABLED && (
                     <div className="mt-6">
                       <div className="relative">
                         <div className="absolute inset-0 flex items-center">
