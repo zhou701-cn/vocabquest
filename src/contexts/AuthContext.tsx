@@ -14,6 +14,7 @@ import {
 } from '@/lib/config'
 import { AuthUser, User, UserGamification } from '@/types'
 import { hydratePoemStoresFromDb, resetPoemHydration } from '@/lib/poemSync'
+import { applyPreferredLanguage } from '@/i18n'
 import toast from 'react-hot-toast'
 
 interface AuthContextType {
@@ -146,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(demoSession.user)
       setProfile(demoSession.profile)
       setGamification(demoSession.gamification)
+      applyPreferredLanguage(demoSession.profile.preferences)
       setLoading(false)
       return
     }
@@ -185,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (demoSession) {
         setProfile(demoSession.profile)
         setGamification(demoSession.gamification)
+        applyPreferredLanguage(demoSession.profile.preferences)
       }
       return
     }
@@ -225,6 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           profileCache.current.set(userId, profileData)
           setProfile(profileData.profile)
           setGamification(profileData.gamification)
+          applyPreferredLanguage(profileData.profile.preferences)
         }
       } catch (error) {
         console.error('Error loading user profile:', error)
@@ -295,6 +299,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(demoSession.user)
     setProfile(demoSession.profile)
     setGamification(demoSession.gamification)
+    applyPreferredLanguage(demoSession.profile.preferences)
 
     toast.success(`Welcome, ${demoSession.profile.full_name}!`)
     return { user: demoSession.user }

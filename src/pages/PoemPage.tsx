@@ -1,13 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowRight,
-  BookOpen,
   Check,
   FileDown,
   FileText,
   FileUp,
-  Home,
   Pause,
   Pencil,
   Play,
@@ -26,6 +25,7 @@ import { PoemProjectDetail } from '@/components/poem/PoemProjectDetail'
 import { PoemContentView } from '@/components/poem/PoemContentView'
 import { PoemFloatingPlayer } from '@/components/poem/PoemFloatingPlayer'
 import { PoemWorksheetPage } from '@/components/poem/PoemWorksheetPage'
+import { AppHeader } from '@/components/AppHeader'
 
 const FORMAT_STYLE: Record<PoemProject['format'], string> = {
   pdf: 'bg-red-100 text-red-700',
@@ -44,6 +44,7 @@ const FORMAT_LABEL: Record<PoemProject['format'], string> = {
 }
 
 export function PoemPage() {
+  const { t } = useTranslation()
   const { projectId, poemId } = useParams()
   const navigate = useNavigate()
   const project = usePoemStore((s) => s.projects.find((p) => p.id === projectId))
@@ -54,7 +55,7 @@ export function PoemPage() {
   // 特例：/poem/:projectId/export → 默写单打印预览（poemId 占位 “export”，与 UUID 无冲突）
   if (projectId && poemId === 'export') {
     if (!project) {
-      view = <MissingBack title="This project does not exist or was deleted." to="/poem" />
+      view = <MissingBack title={t('poem.projectMissing')} to="/poem" />
     } else {
       view = <PoemWorksheetPage key={`${project.id}:export`} project={project} />
     }
@@ -62,13 +63,13 @@ export function PoemPage() {
   // 三级：单首诗词内容页（自带顶部朗读条，悬浮播放器此处隐藏避免重复）
   else if (projectId && poemId) {
     if (!project) {
-      view = <MissingBack title="This project does not exist or was deleted." to="/poem" />
+      view = <MissingBack title={t('poem.projectMissing')} to="/poem" />
     } else {
       const poem = projectPoems.find((p) => p.id === poemId)
       if (!poem) {
         view = (
           <MissingBack
-            title="This poem does not exist or was deleted."
+            title={t('poem.poemMissing')}
             to={`/poem/${project.id}`}
           />
         )
@@ -87,7 +88,7 @@ export function PoemPage() {
   } else if (projectId) {
     // 二级：项目内诗词列表
     if (!project) {
-      view = <MissingBack title="This project does not exist or was deleted." to="/poem" />
+      view = <MissingBack title={t('poem.projectMissing')} to="/poem" />
     } else {
       view = <PoemProjectDetail key={project.id} project={project} onBack={() => navigate('/poem')} />
     }
@@ -108,6 +109,7 @@ export function PoemPage() {
 
 function MissingBack({ title, to }: { title: string; to: string }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50 flex items-center justify-center">
       <div className="text-center">
@@ -116,7 +118,7 @@ function MissingBack({ title, to }: { title: string; to: string }) {
           onClick={() => navigate(to)}
           className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
         >
-          Go back
+          {t('common.goBack')}
         </button>
       </div>
     </div>
@@ -126,6 +128,7 @@ function MissingBack({ title, to }: { title: string; to: string }) {
 /* ------------------------------ 项目列表视图 ------------------------------ */
 
 function PoemProjectList() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const projects = usePoemStore((s) => s.projects)
   const createProject = usePoemStore((s) => s.createProject)
@@ -165,34 +168,21 @@ function PoemProjectList() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50">
+      <AppHeader />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        {/* 顶栏 */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-800 leading-tight">Poem Projects</h1>
-              <p className="text-xs text-gray-500">Import poems from PDF / Word / text files</p>
-            </div>
+        {/* 页面标题 + 导入 */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-lg font-bold text-gray-800 leading-tight">{t('poem.projectsTitle')}</h1>
+            <p className="text-xs text-gray-500">{t('poem.projectsDesc')}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/index')}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-white transition-colors text-sm font-medium"
-            >
-              <Home className="w-4 h-4" />
-              Home
-            </button>
-            <button
-              onClick={() => setImportOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold shadow hover:opacity-90 transition-opacity"
-            >
-              <FileUp className="w-4 h-4" />
-              Import New Poem
-            </button>
-          </div>
+          <button
+            onClick={() => setImportOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold shadow hover:opacity-90 transition-opacity"
+          >
+            <FileUp className="w-4 h-4" />
+            {t('poem.importNew')}
+          </button>
         </div>
 
         {/* 项目列表 */}
@@ -201,17 +191,16 @@ function PoemProjectList() {
             <div className="mx-auto w-16 h-16 rounded-2xl bg-violet-100 flex items-center justify-center">
               <Quote className="w-8 h-8 text-violet-500" />
             </div>
-            <h2 className="mt-4 text-xl font-semibold text-gray-700">No poem projects yet</h2>
+            <h2 className="mt-4 text-xl font-semibold text-gray-700">{t('poem.noProjects')}</h2>
             <p className="mt-1 text-gray-500 text-sm max-w-md mx-auto">
-              Import a PDF / Word file to create a project. Every poem in the file is split into its
-              own entry with title — tap an entry to view &amp; edit its content.
+              {t('poem.noProjectsDesc')}
             </p>
             <button
               onClick={() => setImportOpen(true)}
               className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium shadow hover:opacity-90 transition-opacity"
             >
               <FileUp className="w-4 h-4" />
-              Import your first poem
+              {t('poem.importFirst')}
             </button>
           </div>
         ) : (
@@ -288,8 +277,8 @@ function PoemProjectList() {
                           disabled={projectPoems.length === 0}
                           title={
                             projectPoems.length
-                              ? 'Export a blank worksheet for every poem in this project'
-                              : 'No poems to export'
+                              ? t('poem.exportWorksheet')
+                              : t('poem.noPoemsToExport')
                           }
                           className="p-1.5 rounded-md text-gray-400 hover:text-violet-600 hover:bg-violet-50 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
@@ -302,13 +291,13 @@ function PoemProjectList() {
                             setRenamingId(project.id)
                           }}
                           className="p-1.5 rounded-md text-gray-400 hover:text-violet-600 hover:bg-violet-50"
-                          title="Rename"
+                          title={t('common.rename')}
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         {deleteConfirmId === project.id ? (
                           <span className="flex items-center gap-1 px-1 text-[11px] text-red-700">
-                            Delete?
+                            {t('common.deleteConfirm')}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -319,7 +308,7 @@ function PoemProjectList() {
                               }}
                               className="px-1.5 py-0.5 rounded bg-red-600 text-white hover:bg-red-700"
                             >
-                              Yes
+                              {t('common.yes')}
                             </button>
                             <button
                               onClick={(e) => {
@@ -328,7 +317,7 @@ function PoemProjectList() {
                               }}
                               className="px-1.5 py-0.5 rounded text-red-700 hover:bg-red-100"
                             >
-                              No
+                              {t('common.no')}
                             </button>
                           </span>
                         ) : (
@@ -338,7 +327,7 @@ function PoemProjectList() {
                               setDeleteConfirmId(project.id)
                             }}
                             className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50"
-                            title="Delete"
+                            title={t('common.delete')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -364,7 +353,7 @@ function PoemProjectList() {
                       ))}
                       {projectPoems.length > 3 && (
                         <span className="text-[11px] text-gray-400 leading-5">
-                          +{projectPoems.length - 3} more
+                          {t('poem.more', { count: projectPoems.length - 3 })}
                         </span>
                       )}
                     </div>
@@ -378,8 +367,9 @@ function PoemProjectList() {
                         {FORMAT_LABEL[project.format]}
                       </span>
                       <span className="text-gray-500">
-                        {projectPoems.length} poem{projectPoems.length === 1 ? '' : 's'} ·{' '}
-                        {charCount.toLocaleString()} chars
+                        {projectPoems.length}{' '}
+                        {projectPoems.length === 1 ? t('poem.poem') : t('poem.poems')} ·{' '}
+                        {t('poem.chars', { count: charCount.toLocaleString() })}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -395,8 +385,8 @@ function PoemProjectList() {
                             else if (active && playerStatus === 'paused') playerResume()
                             else playerPlayProject(project.id, 0, 'list')
                           }}
-                          aria-label="Play all poems in this project"
-                          title="Play all poems in this project"
+                          aria-label={t('poem.playAll')}
+                          title={t('poem.playAll')}
                           className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-white shadow transition-all ${
                             queueProjectId === project.id &&
                             playingProjectId === project.id &&

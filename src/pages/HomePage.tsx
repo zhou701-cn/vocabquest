@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVocabularyStore } from '@/stores/vocabularyStore'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
 import { 
   BookOpen, 
@@ -12,15 +13,15 @@ import {
   Target, 
   Flame, 
   Star,
-  TrendingUp,
-  User,
-  LogOut,
-  Settings
+  TrendingUp
 } from 'lucide-react'
+import { AppHeader } from '@/components/AppHeader'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
+import { getUserFirstName } from '@/lib/userDisplay'
 import toast from 'react-hot-toast'
 
 export function HomePage() {
+  const { t } = useTranslation()
   const { user, profile, gamification, signOut } = useAuth()
   const { 
     fetchVocabularyLists, 
@@ -30,7 +31,6 @@ export function HomePage() {
     loading 
   } = useVocabularyStore()
   const navigate = useNavigate()
-  const [showProfileMenu, setShowProfileMenu] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -46,7 +46,7 @@ export function HomePage() {
       return
     }
     if (!currentList) {
-      toast.error('Please select a vocabulary list first')
+      toast.error(t('languagePage.pleaseSelectList'))
       return
     }
     navigate(`/${mode}`)
@@ -55,16 +55,16 @@ export function HomePage() {
   const learningModes = [
     {
       id: 'language',
-      title: 'English Learning',
-      description: 'Learn English with flashcards, quizzes, and more',
+      title: t('home.englishLearningTitle'),
+      description: t('home.englishLearningDesc'),
       icon: BookOpen,
       color: 'from-blue-500 to-blue-600',
       hoverColor: 'hover:from-blue-600 hover:to-blue-700'
     },
     {
       id: 'poem',
-      title: 'Poem Reciting',
-      description: 'Recite poems with masked words',
+      title: t('home.poemRecitingTitle'),
+      description: t('home.poemRecitingDesc'),
       icon: Brain,
       color: 'from-purple-500 to-purple-600',
       hoverColor: 'hover:from-purple-600 hover:to-purple-700'
@@ -82,60 +82,7 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-white/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <BookOpen className="w-8 h-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-800">NatureSpace</h1>
-            </div>
-            
-            <div className="relative">
-              <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
-                  {profile?.full_name?.[0]?.toUpperCase() || 'U'}
-                </div>
-                <span className="text-gray-700 font-medium">
-                  {profile?.full_name || 'User'}
-                </span>
-              </button>
-              
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2">
-                  <button
-                    onClick={() => navigate('/profile')}
-                    className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-2"
-                  >
-                    <User className="w-4 h-4" />
-                    <span>Profile</span>
-                  </button>
-                  {profile?.role === 'admin' && (
-                    <button
-                      onClick={() => navigate('/admin')}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-2 text-blue-600"
-                    >
-                      <Settings className="w-4 h-4" />
-                      <span>Admin Dashboard</span>
-                    </button>
-                  )}
-                  <hr className="my-1" />
-                  <button
-                    onClick={signOut}
-                    className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-2 text-red-600"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
@@ -146,10 +93,10 @@ export function HomePage() {
           transition={{ duration: 0.6 }}
         >
           <h2 className="text-3xl font-bold text-gray-800 mb-2">
-            Welcome back, {profile?.full_name?.split(' ')[0] || 'Student'}! 🎉
+            {t('home.welcome', { name: getUserFirstName(user, profile) })}
           </h2>
           <p className="text-gray-600">
-            Ready to continue your vocabulary journey? Let's learn some new words today!
+            {t('home.subtitle')}
           </p>
         </motion.div>
 
