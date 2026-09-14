@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Volume2, VolumeX, Lightbulb, RotateCcw, CheckCircle, XCircle, Trophy, Target, ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useVocabularyStore } from '@/stores/vocabularyStore'
 import { useAuth } from '@/contexts/AuthContext'
 import { VocabularyWord } from '@/types'
 import { SpellingSessionManager, SpellingSessionData, SpellingWordAttempt, HintLevel } from '@/lib/spellingSession'
+import i18n from '@/i18n'
 import toast from 'react-hot-toast'
 
 interface SpellingSessionStats {
@@ -17,6 +19,7 @@ interface SpellingSessionStats {
 }
 
 export function SpellingPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuth()
   const {
@@ -175,7 +178,7 @@ export function SpellingPage() {
       setWordStartTime(Date.now())
       setIsResuming(false)
       
-      toast.success(`Resumed spelling session (${sessionData.currentWordIndex + 1}/${sessionData.sessionWords.length} words)`)
+      toast.success(t('spelling.resumed', { current: sessionData.currentWordIndex + 1, total: sessionData.sessionWords.length }))
     } catch (error) {
       console.error('Error resuming spelling session:', error)
       setIsResuming(false)
@@ -264,7 +267,7 @@ export function SpellingPage() {
       case 3:
         return word[0] + ' ' + word.slice(1, -1).split('').map(() => '_').join(' ') + ' ' + word[word.length - 1] // First and last
       case 4:
-        return `Definition: ${currentWord?.definition || 'A word you need to spell'}` // Definition
+        return `${i18n.t('spelling.definitionLabel')}: ${currentWord?.definition || i18n.t('spelling.definitionFallback')}` // Definition
       case 5:
         return word.toUpperCase() // Show complete word
       default:
@@ -308,12 +311,12 @@ export function SpellingPage() {
     let points = 0
     if (correct) {
       points = Math.max(10 - (hintLevel * 2), 2) // Base 10 points, -2 per hint, minimum 2
-      toast.success(`Correct! +${points} points!`, {
+      toast.success(t('spelling.correctPoints', { points }), {
         icon: '🎉',
         duration: 2000,
       })
     } else {
-      toast.error('Try again!', {
+      toast.error(t('spelling.tryAgain'), {
         icon: '💪',
         duration: 1500,
       })
@@ -395,7 +398,7 @@ export function SpellingPage() {
   }
   
   const handleAbandonSession = () => {
-    if (confirm('Are you sure you want to abandon this spelling session? Your progress will be saved.')) {
+    if (confirm(t('spelling.abandonConfirm'))) {
       SpellingSessionManager.clearSession()
       navigate('/dashboard')
     }
@@ -434,9 +437,9 @@ export function SpellingPage() {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center max-w-md mx-auto px-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Resuming Session...</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('spelling.resuming')}</h2>
             <p className="text-gray-600">
-              Loading your previous spelling session
+              {t('spelling.resumingDesc')}
             </p>
           </div>
         </div>
@@ -454,26 +457,26 @@ export function SpellingPage() {
             className="bg-white rounded-2xl shadow-xl p-8 text-center"
           >
             <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-            <h2 className="text-3xl font-bold text-gray-800 mb-4">Session Complete!</h2>
+            <h2 className="text-3xl font-bold text-gray-800 mb-4">{t('spelling.completeTitle')}</h2>
             
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-green-600">{sessionStats.wordsCorrect}</div>
-                <div className="text-sm text-gray-600">Words Correct</div>
+                <div className="text-sm text-gray-600">{t('spelling.wordsCorrect')}</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-blue-600">{sessionStats.pointsEarned}</div>
-                <div className="text-sm text-gray-600">Points Earned</div>
+                <div className="text-sm text-gray-600">{t('spelling.pointsEarned')}</div>
               </div>
               <div className="bg-purple-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-purple-600">{Math.round(sessionStats.totalTime)}s</div>
-                <div className="text-sm text-gray-600">Total Time</div>
+                <div className="text-sm text-gray-600">{t('spelling.totalTime')}</div>
               </div>
               <div className="bg-orange-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-orange-600">
                   {sessionStats.wordsAttempted > 0 ? Math.round((sessionStats.wordsCorrect / sessionStats.wordsAttempted) * 100) : 0}%
                 </div>
-                <div className="text-sm text-gray-600">Accuracy</div>
+                <div className="text-sm text-gray-600">{t('spelling.accuracy')}</div>
               </div>
             </div>
             
@@ -483,13 +486,13 @@ export function SpellingPage() {
                 className="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:from-green-700 hover:to-teal-700 transition-all duration-200"
               >
                 <RotateCcw className="w-5 h-5 inline mr-2" />
-                Play Again
+                {t('spelling.playAgain')}
               </button>
               <button
                 onClick={() => navigate('/dashboard')}
                 className="w-full bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-medium hover:bg-gray-200 transition-all duration-200"
               >
-                Back to Dashboard
+                {t('spelling.backToDashboard')}
               </button>
             </div>
           </motion.div>
@@ -504,22 +507,22 @@ export function SpellingPage() {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center max-w-md mx-auto px-4">
             <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-red-800 mb-2">Loading Error</h2>
+              <h2 className="text-xl font-semibold text-red-800 mb-2">{t('spelling.errorTitle')}</h2>
               <p className="text-red-600 mb-4">
-                There was an issue loading the spelling session.
+                {t('spelling.errorDesc')}
               </p>
               <div className="space-y-2">
                 <button
                   onClick={() => window.location.reload()}
                   className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
                 >
-                  Refresh Page
+                  {t('spelling.refreshPage')}
                 </button>
                 <button
                   onClick={() => navigate('/dashboard')}
                   className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
                 >
-                  Back to Dashboard
+                  {t('spelling.backToDashboard')}
                 </button>
               </div>
             </div>
@@ -535,7 +538,7 @@ export function SpellingPage() {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading spelling session...</p>
+            <p className="text-gray-600">{t('spelling.loading')}</p>
           </div>
         </div>
       </div>
@@ -554,13 +557,13 @@ export function SpellingPage() {
                 className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
-                <span>Dashboard</span>
+                <span>{t('spelling.dashboard')}</span>
               </button>
               <button
                 onClick={handleAbandonSession}
                 className="text-red-600 hover:text-red-800 transition-colors text-sm"
               >
-                Abandon Session
+                {t('spelling.abandon')}
               </button>
             </div>
             
@@ -571,7 +574,7 @@ export function SpellingPage() {
               </div>
               <div className="flex items-center space-x-2 text-sm text-green-600 font-medium">
                 <Trophy className="w-4 h-4" />
-                <span>{sessionStats.pointsEarned} pts</span>
+                <span>{t('spelling.pts', { points: sessionStats.pointsEarned })}</span>
               </div>
             </div>
             
@@ -595,10 +598,10 @@ export function SpellingPage() {
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">
-                Word {currentWordIndex + 1} of {sessionWords.length}
+                {t('spelling.wordOf', { current: currentWordIndex + 1, total: sessionWords.length })}
               </span>
               {wordAttempts[currentWordIndex]?.completed && (
-                <span className="text-green-600 text-sm">✓ Completed</span>
+                <span className="text-green-600 text-sm">{t('spelling.completed')}</span>
               )}
             </div>
             <div className="w-full max-w-xs bg-gray-200 rounded-full h-2">
@@ -633,7 +636,7 @@ export function SpellingPage() {
               <Volume2 className={`w-8 h-8 ${isPlaying ? 'animate-pulse' : ''}`} />
             </button>
             <p className="text-gray-600 mt-3 text-lg">
-              {isPlaying ? 'Playing pronunciation...' : 'Click to hear the word'}
+              {isPlaying ? t('spelling.playingAudio') : t('spelling.clickToHear')}
             </p>
           </div>
           
@@ -650,7 +653,7 @@ export function SpellingPage() {
                 >
                   <div className="flex items-center justify-center space-x-2 text-yellow-700">
                     <Lightbulb className="w-5 h-5" />
-                    <span className="font-medium">Hint {hintLevel}</span>
+                    <span className="font-medium">{t('spelling.hintLabel', { level: hintLevel })}</span>
                   </div>
                   <div className="mt-2 text-lg font-mono tracking-wider">
                     {getWordHint(currentWord.word, hintLevel)}
@@ -667,7 +670,7 @@ export function SpellingPage() {
               value={currentAnswer}
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
-              placeholder="Type the spelling here..."
+              placeholder={t('spelling.spellingPlaceholder')}
               disabled={showFeedback}
               className={`w-full text-2xl text-center p-4 border-2 rounded-xl focus:outline-none focus:ring-4 transition-all duration-200 ${
                 showFeedback
@@ -694,12 +697,12 @@ export function SpellingPage() {
                   {isCorrect ? (
                     <>
                       <CheckCircle className="w-6 h-6" />
-                      <span>Excellent! Correct spelling!</span>
+                      <span>{t('spelling.excellent')}</span>
                     </>
                   ) : (
                     <>
                       <XCircle className="w-6 h-6" />
-                      <span>Not quite right. Keep trying!</span>
+                      <span>{t('spelling.notQuite')}</span>
                     </>
                   )}
                 </div>
@@ -721,7 +724,7 @@ export function SpellingPage() {
                   disabled={!currentAnswer.trim()}
                   className="flex-1 bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:from-green-700 hover:to-teal-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Check Spelling
+                  {t('spelling.checkSpelling')}
                 </button>
                 
                 <button
@@ -730,14 +733,14 @@ export function SpellingPage() {
                   className="px-6 py-3 bg-yellow-100 text-yellow-700 rounded-xl font-medium hover:bg-yellow-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Lightbulb className="w-4 h-4 inline mr-2" />
-                  {hintLevel >= 5 ? 'All hints used' : 'Get Hint'}
+                  {hintLevel >= 5 ? t('spelling.allHintsUsed') : t('spelling.getHint')}
                 </button>
                 
                 <button
                   onClick={handleSkipWord}
                   className="px-6 py-3 bg-gray-100 text-gray-600 rounded-xl font-medium hover:bg-gray-200 transition-all duration-200"
                 >
-                  Skip Word
+                  {t('spelling.skipWord')}
                 </button>
               </>
             )}
@@ -753,13 +756,13 @@ export function SpellingPage() {
             className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
-            <span>Previous</span>
+            <span>{t('spelling.previous')}</span>
           </button>
 
           <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <span>Word {currentWordIndex + 1} of {sessionWords.length}</span>
+            <span>{t('spelling.wordOf', { current: currentWordIndex + 1, total: sessionWords.length })}</span>
             {wordAttempts[currentWordIndex]?.completed && (
-              <span className="text-green-600">✓ Completed</span>
+              <span className="text-green-600">{t('spelling.completed')}</span>
             )}
           </div>
 
@@ -768,7 +771,7 @@ export function SpellingPage() {
             disabled={currentWordIndex >= sessionWords.length - 1}
             className="flex items-center space-x-2 px-4 py-2 bg-green-100 hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
-            <span>Next</span>
+            <span>{t('spelling.next')}</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
